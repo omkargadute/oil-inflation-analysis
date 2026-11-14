@@ -36,14 +36,14 @@ Details: `results/country_series_coverage.csv`; summary: `results/country_covera
 
 ## Recommendation
 
-Start the intended comparison with **US, China, Japan and Canada**: four countries and 1,200 potential country-month observations. Germany and France are optional additions. The same Brent and global-activity series are shared across countries; repeating them does not create independent global shocks.
+The active analysis uses **US, China, Japan and Canada**: four countries and 1,200 complete country-month observations. Germany and France remain optional future additions. The same Brent and global-activity series are shared across countries; repeating them does not create independent global shocks.
 
-The simplest direct extension of the existing **officially adjusted monthly specification** is US + Canada + Germany + France. To include China and Japan, choose a consistent seasonality strategy first:
+An alternative restricted to full-period **officially adjusted monthly series** would be US + Canada + Germany + France. To include China and Japan in the active setup, seasonality must be handled consistently. Two routes were considered:
 
 1. **Preserve monthly inflation:** apply a documented seasonal-adjustment procedure consistently to national unadjusted indices, or model seasonal structure explicitly. Validate it, and avoid full-sample adjustment leaking future information into forecast tests. Moving holidays such as Lunar New Year may need special treatment. Explain seasonal nuisance parameters under the course's simple-model scope.
 2. **Use year-over-year inflation for the international comparison:** all 16 complete candidates support 300 observations. This reduces ordinary seasonal influence but does not remove every calendar effect, and reintroduces overlapping windows and persistence. It needs an appropriate error model and answers a different question from the monthly baseline.
 
-The current US notebook remains the tested baseline. This audit does not fit new-country models or produce an adjusted international panel. Do not choose the outcome or adjustment method based on which yields significant oil coefficients.
+The active notebook now fits US, China, Japan and Canada using unadjusted CPI for all four countries and country-specific calendar-month effects within each regression. This implements the monthly route above without labeling the modeled outcomes officially adjusted. The availability audit itself does not fit models; `analysis/oil_inflation.py` builds the selected four-country panel and fits. Moving holidays and changing seasonal structure remain limitations. Do not choose the outcome or adjustment method based on which yields significant oil coefficients.
 
 ## Causal and measurement limits
 

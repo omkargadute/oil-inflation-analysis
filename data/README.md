@@ -1,22 +1,29 @@
-# Data dictionary
+# Four-country data dictionary
 
-The international availability audit adds two OECD snapshots and `country_manifest.json`. Run `python scripts/check_country_coverage.py` to verify them and reproduce `country_cpi_candidate_panel.csv`. That candidate panel is unadjusted and is not a replacement for the seasonally adjusted US baseline. Coverage details and limitations are in [the country audit](../docs/COUNTRY_AVAILABILITY.md).
-
-`raw/` contains the three source snapshots required to reproduce the current analysis. `raw/manifest.json` records source URLs, recorded download timestamps, and SHA-256 hashes. Verify with `python scripts/download_data.py --verify`.
-
-`processed/us_monthly.csv` has one observation per outcome month, January 2000–December 2024 (300 rows). All modeled variables are complete. No values are imputed.
+`processed/multicountry_monthly.csv` is the main analysis panel: US, China, Japan and Canada, 300 complete months per country, 2000–2024. All four CPI series are **unadjusted**; recurring seasonality is modeled in each country's regression. No imputation or cross-flow splicing is used. The previous `us_monthly.csv` and officially adjusted US CPI snapshot are retired from the active repository.
 
 | Column | Meaning |
 |---|---|
-| date | Outcome month; dates identify months, not publication dates |
-| oil | Monthly Brent nominal USD/barrel |
-| cpi | Seasonally adjusted US CPI index level |
-| demand | IGREA global commodity-market activity index |
+| date | Outcome month; not the release date |
+| country, iso3 | Country label and ISO code |
+| cpi | National all-items monthly CPI index, unadjusted |
+| adjustment | N: unadjusted |
+| flow | Explicit OECD dataflow used for this complete country series |
+| oil_usd | Monthly nominal Brent USD/barrel, shared globally |
+| global_activity | IGREA industrial-commodity activity proxy, shared globally |
 | oil_pct | 100 × (oil_t / oil_(t−1) − 1) |
-| monthly | 100 × (cpi_t / cpi_(t−1) − 1); not annualized |
-| yearly | 100 × (cpi_t / cpi_(t−12) − 1); diagnostic comparison |
-| T | oil_pct_(t−1) / 10; treatment |
-| C | demand_(t−2) / 100; potential confounder |
-| last_monthly | monthly_(t−1); diagnostic prediction benchmark |
+| monthly | 100 × (cpi_t / cpi_(t−1) − 1), not annualized |
+| yearly | 100 × (cpi_t / cpi_(t−12) − 1), descriptive comparison |
+| T | oil_pct_(t−1) / 10 |
+| C | global_activity_(t−2) / 100 |
+| month | Calendar month; indexes the statistical seasonal terms |
+| last_monthly | Previous month's inflation; forecast benchmark |
+| last_year_same_month | Same month's inflation one year earlier; forecast benchmark |
 
-The raw files extend beyond the analysis window; the analysis constructs lags before selecting 2000–2024. Source revisions and publication delays matter: this is an analysis of revised snapshots, not a real-time vintage backtest.
+US/China use the COICOP 1999 OECD flow, Japan/Canada the COICOP 2018 flow. National indices are not perfectly harmonized merely because they share an index reference year. Raw data include 1999 for transformations and lags. `last_year_same_month` is unavailable for January 2000 because January 1999 inflation would need December 1998; this optional benchmark is complete throughout the 2020–2024 evaluation period and is not a modeled-variable gap.
+
+`raw/manifest.json` records Brent and IGREA sources/hashes. `raw/country_manifest.json` records the two OECD snapshots, with exact URLs, timestamps and hashes. Run `python scripts/download_data.py --verify` to verify all four source files. `--refresh` explicitly downloads revisions; rebuild the audit and analysis afterward.
+
+`processed/country_cpi_candidate_panel.csv` and `results/country_coverage.csv` are a broader 17-country availability audit, not the main fitted panel. Run `python scripts/check_country_coverage.py` to reproduce them. See [the availability report](../docs/COUNTRY_AVAILABILITY.md) for detailed limitations.
+
+All sources are revised snapshots; neither notebook nor audit reconstructs real-time publication vintages. Source data retain their providers' applicable terms.

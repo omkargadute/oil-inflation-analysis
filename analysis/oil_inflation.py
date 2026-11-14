@@ -1,280 +1,278 @@
 # %% [markdown]
-# # Oil and US inflation: final feasibility analysis
-# This extends the initial POC rather than replacing it. We verify monthly seasonally adjusted CPI,
-# compare yearly versus monthly outcomes, fit a three-variable Bayesian model with AR(1) residuals,
-# validate recovery, check posterior sampling and prediction, and assess whether the causal plan is defensible.
-# All results are exploratory model development using revised snapshots, not preregistered confirmation.
-# Sources: [BLS CPI via FRED](https://fred.stlouisfed.org/series/CPIAUCSL),
-# [Brent](https://fred.stlouisfed.org/series/MCOILBRENTEU),
-# [Dallas Fed IGREA](https://www.dallasfed.org/research/igrea).
+# # Oil-price changes and inflation: US, China, Japan and Canada
+# Monthly 2000-2024, separate country models with the same three substantive variables: prior Brent
+# change T, monthly CPI inflation Y, prior global activity C. Candidate DAG: C -> T -> Y and C -> Y.
+# This is an assumption-dependent observational analysis, not identification of oil supply shocks.
+#
+# Every country uses **unadjusted national all-items CPI** with country-specific calendar-month effects.
+# We do not mix officially adjusted US CPI with unadjusted Asian CPI. Fixed seasonal patterns do not
+# capture all moving holidays (including Lunar New Year), changing seasonality, taxes or administered prices.
+# Seasonal parameters are statistical structure, not additional claimed causal confounders; explain this
+# richer temporal model under the course's three-variable requirement. No pooled independence or country
+# ranking test is assumed. Sources: [OECD](https://data-explorer.oecd.org/),
+# [Brent](https://fred.stlouisfed.org/series/MCOILBRENTEU), [IGREA](https://www.dallasfed.org/research/igrea).
 # %%
 from pathlib import Path
-import json, hashlib, sys
+import sys, json, hashlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
-from scipy.stats import norm, rankdata
+from scipy.stats import multivariate_normal
 import statsmodels.api as sm
 from statsmodels.stats.diagnostic import acorr_ljungbox
-from statsmodels.tsa.stattools import acf
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
 ROOT=Path.cwd()
 if not (ROOT/'data/raw').exists(): ROOT=ROOT.parent
+if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
+from analysis.model import SEASON, design, log_target, sample_model, summarize
 OUT=ROOT/'results'; OUT.mkdir(exist_ok=True)
+COUNTRIES={'USA':'United States','CHN':'China','JPN':'Japan','CAN':'Canada'}
+FLOWS={'USA':'DSD_PRICES@DF_PRICES_ALL','CHN':'DSD_PRICES@DF_PRICES_ALL',
+       'JPN':'DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL','CAN':'DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL'}
 plt.rcParams.update({'figure.figsize':(10,4),'figure.dpi':110,'axes.spines.top':False,'axes.spines.right':False})
 def plot_save(name):
-    plt.tight_layout(); plt.savefig(OUT/(name+'.png'),bbox_inches='tight'); plt.show(); plt.close()
-oil=pd.read_csv(ROOT/'data/raw/brent_direct.csv',parse_dates=[0]);oil.columns=['date','oil']
-cpi=pd.read_csv(ROOT/'data/raw/us_cpi_seasonally_adjusted.csv',parse_dates=[0]);cpi.columns=['date','cpi']
-dem=pd.read_csv(ROOT/'data/raw/igrea.csv',parse_dates=[0]);dem.columns=['date','demand']
-for frame in [oil,cpi,dem]:assert not frame.date.duplicated().any()
-d=pd.DataFrame({'date':pd.date_range('1999-01-01','2024-12-01',freq='MS')})
-for frame in [oil,cpi,dem]:d=d.merge(frame,on='date',how='left',validate='one_to_one')
-d['oil_pct']=d.oil.pct_change(fill_method=None)*100
-d['monthly']=d.cpi.pct_change(fill_method=None)*100
-d['yearly']=d.cpi.pct_change(12,fill_method=None)*100
-d['T']=d.oil_pct.shift(1)/10;d['C']=d.demand.shift(2)/100
-d['last_monthly']=d.monthly.shift(1)
-d=d[d.date.ge('2000-01-01')].reset_index(drop=True)
-assert len(d)==300 and d[['monthly','yearly','T','C']].notna().all().all()
-d.to_csv(ROOT/'data/processed/us_monthly.csv',index=False)
-print('300 unique, complete monthly observations; no interpolation.')
-print(d[['monthly','yearly','T','C']].describe().round(3).to_string())
-print('Treatment/prior demand correlation:',round(d['T'].corr(d.C),3))
+    plt.tight_layout();plt.savefig(OUT/(name+'.png'),bbox_inches='tight');plt.show();plt.close()
+
+frames=[]
+for manifest_name in ['manifest.json','country_manifest.json']:
+    for item in json.loads((ROOT/'data/raw'/manifest_name).read_text()):
+        path=ROOT/'data/raw'/item['file']
+        assert hashlib.sha256(path.read_bytes()).hexdigest()==item['sha256'],item['file']
+        if manifest_name=='country_manifest.json':
+            f=pd.read_csv(path);f['flow']=item['flow'];frames.append(f)
+cpi=pd.concat(frames,ignore_index=True)
+assert not cpi.duplicated(['REF_AREA','flow','ADJUSTMENT','TIME_PERIOD']).any()
+oil=pd.read_csv(ROOT/'data/raw/brent_direct.csv',parse_dates=[0]);oil.columns=['date','oil_usd']
+dem=pd.read_csv(ROOT/'data/raw/igrea.csv',parse_dates=[0]);dem.columns=['date','global_activity']
+assert not oil.date.duplicated().any() and not dem.date.duplicated().any()
+base=pd.DataFrame({'date':pd.date_range('1999-01-01','2024-12-01',freq='MS')})
+base=base.merge(oil,on='date',how='left',validate='one_to_one').merge(dem,on='date',how='left',validate='one_to_one')
+base['oil_pct']=base.oil_usd.pct_change(fill_method=None)*100
+base['T']=base.oil_pct.shift(1)/10;base['C']=base.global_activity.shift(2)/100
+groups={};panels=[]
+for iso,name in COUNTRIES.items():
+    f=cpi[(cpi.REF_AREA==iso)&(cpi.flow==FLOWS[iso])&(cpi.ADJUSTMENT=='N')].copy()
+    assert f.FREQ.eq('M').all() and f.UNIT_MEASURE.eq('IX').all() and f.MEASURE.eq('CPI').all()
+    f['date']=pd.to_datetime(f.TIME_PERIOD)
+    d=base.merge(f[['date','OBS_VALUE']].rename(columns={'OBS_VALUE':'cpi'}),on='date',how='left',validate='one_to_one')
+    d['monthly']=d.cpi.pct_change(fill_method=None)*100;d['yearly']=d.cpi.pct_change(12,fill_method=None)*100
+    d['last_monthly']=d.monthly.shift(1);d['last_year_same_month']=d.monthly.shift(12)
+    d['month']=d.date.dt.month;d['country']=name;d['iso3']=iso;d['adjustment']='N';d['flow']=FLOWS[iso]
+    d=d[d.date.ge('2000-01-01')].reset_index(drop=True)
+    assert len(d)==300 and d[['monthly','yearly','T','C','last_monthly']].notna().all().all()
+    groups[iso]=d;panels.append(d)
+panel=pd.concat(panels,ignore_index=True)
+assert len(panel)==1200 and not panel.duplicated(['iso3','date']).any()
+panel.to_csv(ROOT/'data/processed/multicountry_monthly.csv',index=False)
+description=panel.groupby('country')[['monthly','yearly','T','C']].describe()
+description.to_csv(OUT/'descriptive_statistics.csv')
+print('Four complete calendars, 300 months each; no imputation or series splicing.')
+print(description.round(3).to_string())
+print('Shared treatment-demand correlation:',round(groups['USA']['T'].corr(groups['USA'].C),3))
+fig,axes=plt.subplots(2,2,figsize=(12,7),sharex=True)
+for ax,(iso,d) in zip(axes.flat,groups.items()):
+    ax.plot(d.date,d.monthly);ax.set_title(COUNTRIES[iso]);ax.set_ylabel('Unadjusted monthly CPI %')
+plot_save('country_inflation')
 # %% [markdown]
-# ## Why change the outcome?
-# Monthly CPI inflation is 100(CPI_t/CPI_(t-1)−1), in monthly percentage points, not annualized.
-# It avoids the mechanically overlapping 12-month windows in yearly inflation, but answers a different question.
-# Treatment is the prior month's oil percentage change divided by 10; confounder is IGREA from two months prior divided by 100.
-# These are fixed unit conversions, not fitted standardization. DAG: C→T, C→Y, T→Y.
-# The proxy and DAG remain contestable; AR residuals model dependence, not additional causal adjustment.
-# %%
-def Xmat(g,adj=True):return np.column_stack([np.ones(len(g)),g['T'],g['C']]) if adj else np.column_stack([np.ones(len(g)),g['T']])
-screen=[]
-for outcome in ['yearly','monthly']:
-    fit=sm.OLS(d[outcome],Xmat(d)).fit(cov_type='HAC',cov_kwds={'maxlags':12})
-    screen.append({'outcome':outcome,'beta':np.asarray(fit.params)[1],'HAC_low':np.asarray(fit.conf_int())[1,0],
-                  'HAC_high':np.asarray(fit.conf_int())[1,1],'residual_lag1':pd.Series(fit.resid).autocorr()})
-screen=pd.DataFrame(screen);print(screen.round(4).to_string(index=False));screen.to_csv(OUT/'outcome_comparison.csv',index=False)
-fig,axs=plt.subplots(2,1,figsize=(10,6),sharex=True)
-for ax,col in zip(axs,['yearly','monthly']):ax.plot(d.date,d[col]);ax.set_ylabel(col+' inflation %');ax.grid(alpha=.2)
-plot_save('outcome_comparison')
-# %% [markdown]
-# ## Fully specified Bayesian model with dependent errors
-# Y_t = α + β T_t + γ C_t + u_t; u_t = φ u_(t−1) + ε_t; ε_t ~ Normal(0,σ²).
-# Initial u_0 ~ Normal(0,σ²/(1−φ²)); |φ|<1. The unadjusted comparison omits γC.
-# Priors are independent: α~N(0,0.5²), β~N(0,0.3²), γ~N(0,0.5²), σ~HalfNormal(0.5), φ~Uniform(−1,1).
-# β is monthly inflation percentage points per 10-percentage-point oil change. These conservative,
-# zero-centered working priors allow either sign; the independent Fed mechanism paper motivates a possible
-# positive effect but does not calibrate this different estimand. Prior scale justification is provisional.
-# We show prior prediction and vary slope priors rather than claim that a predictive check validates a prior.
+# ## Same estimand, priors and seasonal structure in each country
+# T = oil percentage change in month t-1 / 10; Y = unadjusted monthly CPI inflation in t;
+# C = IGREA in t-2 / 100. Beta is monthly inflation percentage points per 10-percentage-point oil change.
 #
-# Four random-walk Metropolis chains sample b, log σ, atanh φ. MAP curvature provides a fixed proposal
-# shape, warmup adapts only the scalar step size, then sampling freezes it. All Jacobians are included.
-# The exact Gaussian AR(1) likelihood includes the stationary initial observation. No thinning.
+# Y_t = alpha + beta*T_t + gamma*C_t + s_month(t) + u_t; u_t = phi*u_(t-1) + epsilon_t.
+# epsilon ~ Normal(0,sigma^2); initial u_0 ~ Normal(0,sigma^2/(1-phi^2)); |phi|<1.
+# Eleven orthonormal Helmert contrasts give seasonal effects summing to zero. Both adjusted and unadjusted
+# models retain seasonality; the unadjusted comparison omits C only. Independent working priors:
+# alpha~N(0,.5^2), beta~N(0,.3^2), gamma~N(0,.5^2), each seasonal contrast~N(0,.5^2),
+# sigma~HalfNormal(.5), phi~Uniform(-1,1). Prior scale justification is provisional, not completed by a
+# predictive check alone. All countries use the same priors; no tuning for significant coefficients.
+#
+# Four Metropolis-within-Gibbs chains: exact Gaussian coefficient draws, transformed sigma/phi proposals
+# with Jacobians; 2,000 warmup then 6,000 retained iterations per chain. Adaptation stops after warmup.
+# The numerical implementation is in analysis/model.py and is included in the generated notebook.
 # %%
-def target_factory(X,y):
-    p=X.shape[1];scales=np.array([.5,.3,.5][:p]);n=len(y)
-    def logp(z):
-        b=z[:p];ls=z[p];eta=z[p+1]
-        if abs(ls)>15 or abs(eta)>8:return -np.inf
-        sigma=np.exp(ls);phi=np.tanh(eta);r=y-X@b
-        ss=(1-phi**2)*r[0]**2+np.sum((r[1:]-phi*r[:-1])**2)
-        return (-n*ls+.5*np.log1p(-phi**2)-.5*ss/sigma**2
-                -.5*np.sum((b/scales)**2)-.5*(sigma/.5)**2+ls+np.log1p(-phi**2))
-    return logp
-
-def sample_model(X,y,seed=22,warm=3500,keep=10000):
-    p=X.shape[1];logp=target_factory(X,y)
-    b=np.linalg.lstsq(X,y,rcond=None)[0];res=y-X@b
-    phi=np.clip(pd.Series(res).autocorr(),-.9,.9)
-    start=np.r_[b,np.log(max(np.std(res[1:]-phi*res[:-1]),.03)),np.arctanh(phi)]
-    opt=minimize(lambda z:-logp(z),start,method='BFGS',options={'gtol':1e-7})
-    mode=opt.x;q=len(mode);h=1e-4
-    H=np.empty((q,q));f=lambda z:-logp(z)
-    for i in range(q):
-        ei=np.eye(q)[i]*h
-        for j in range(q):
-            ej=np.eye(q)[j]*h
-            H[i,j]=(f(mode+ei+ej)-f(mode+ei-ej)-f(mode-ei+ej)+f(mode-ei-ej))/(4*h*h)
-    ev,U=np.linalg.eigh((H+H.T)/2);cov=(U*(1/np.maximum(ev,1e-3)))@U.T;L=np.linalg.cholesky(cov)
-    chains=[];accept=[]
-    for chain in range(4):
-        rng=np.random.default_rng(seed+chain*100);z=mode+L@rng.normal(size=q)*2;lp=logp(z)
-        step=2.38/np.sqrt(q);block=0;accepted=0;draw=[]
-        for k in range(warm+keep):
-            prop=z+step*(L@rng.normal(size=q));v=logp(prop)
-            if np.log(rng.uniform())<v-lp:z=prop;lp=v;block+=1;accepted+=int(k>=warm)
-            if k<warm and (k+1)%100==0:step*=np.exp(np.clip(block/100-.25,-.2,.2));block=0
-            if k>=warm:draw.append(z.copy())
-        chains.append(draw);accept.append(accepted/keep)
-    chains=np.array(chains);chains[:,:,p]=np.exp(chains[:,:,p]);chains[:,:,p+1]=np.tanh(chains[:,:,p+1])
-    return chains,accept
-
-def diagnostics(chains,names):
-    # Split-chain rank normalized/folded R-hat; bulk ESS via paired initial-positive autocorrelation sums.
-    m,n,p=chains.shape;split=np.concatenate([chains[:,:n//2],chains[:,n//2:]],axis=0)
-    def rhat(a):
-        ns=a.shape[1];W=np.var(a,axis=1,ddof=1).mean();B=ns*np.var(a.mean(axis=1),ddof=1)
-        return np.sqrt(((ns-1)/ns*W+B/ns)/W)
-    def ess(a):
-        ns=a.shape[1];W=np.var(a,axis=1,ddof=1).mean();vp=(ns-1)/ns*W+np.var(a.mean(axis=1),ddof=1)
-        rho=1-(W-np.mean([acf(v,nlags=min(2000,ns-1),fft=True)*np.var(v,ddof=1) for v in a],axis=0))/vp
-        pairs=[]
-        for j in range(0,len(rho)-1,2):
-            pair=rho[j]+rho[j+1]
-            if pair<0:break
-            pairs.append(min(pair,pairs[-1]) if pairs else pair)
-        return min(a.size,a.size/max(-1+2*np.sum(pairs),1))
-    rows=[]
-    for j,name in enumerate(names):
-        a=split[:,:,j];z=norm.ppf((rankdata(a).reshape(a.shape)-.375)/(a.size+.25))
-        folded=np.abs(a-np.median(a));zf=norm.ppf((rankdata(folded).reshape(a.shape)-.375)/(a.size+.25))
-        lo,hi=np.quantile(a,[.05,.95]);bulk=ess(z);tail=min(ess((a<=lo).astype(float)),ess((a>=hi).astype(float)))
-        rows.append({'parameter':name,'mean':a.mean(),'lower95':np.quantile(a,.025),'upper95':np.quantile(a,.975),
-                     'rank_split_Rhat':max(rhat(z),rhat(zf)),'bulk_ESS':bulk,'tail_ESS':tail,
-                     'mean_MCSE_approx':a.std()/np.sqrt(bulk)})
-    return pd.DataFrame(rows)
-
-rng=np.random.default_rng(50);nprior=3000
-bp=rng.normal(size=(nprior,3))*[.5,.3,.5];sp=np.abs(rng.normal(0,.5,nprior));phip=rng.uniform(-1,1,nprior)
-prior_res=np.empty((nprior,300));prior_res[:,0]=rng.normal(size=nprior)*sp/np.sqrt(1-phip**2)
-for t in range(1,300):prior_res[:,t]=phip*prior_res[:,t-1]+rng.normal(size=nprior)*sp
-prior_pred=bp@Xmat(d).T+prior_res
-print('Prior predictive central 95%:',np.quantile(prior_pred,[.025,.975]).round(3),'monthly percentage points')
-plt.hist(prior_pred.ravel(),bins=100,range=(-5,5),density=True);plt.xlabel('Monthly inflation %');plt.title('Working prior predictive distribution');plot_save('prior_predictive')
-chains,accept=sample_model(Xmat(d),d.monthly.to_numpy())
-diag=diagnostics(chains,['alpha','beta','gamma','sigma','phi']);print('Acceptance:',np.round(accept,3));print(diag.round(4).to_string(index=False))
-diag.to_csv(OUT/'posterior_diagnostics.csv',index=False);np.savez_compressed(OUT/'posterior_draws.npz',adjusted=chains)
-unadj,acc_u=sample_model(Xmat(d,False),d.monthly.to_numpy(),seed=42)
-diag_u=diagnostics(unadj,['alpha','beta','sigma','phi']);print('Unadjusted:');print(diag_u.round(4).to_string(index=False));diag_u.to_csv(OUT/'unadjusted_diagnostics.csv',index=False)
-fig,axs=plt.subplots(2,1,figsize=(10,5))
-for c in range(4):axs[0].plot(chains[c,:,1],lw=.3,alpha=.6);axs[1].plot(chains[c,:,-1],lw=.3,alpha=.6)
-axs[0].set_ylabel('beta');axs[1].set_ylabel('phi');axs[1].set_xlabel('Post-warmup iteration');plot_save('mcmc_traces')
+assert np.allclose(SEASON.sum(axis=0),0) and np.allclose(SEASON.T@SEASON,np.eye(11))
+for iso,d in groups.items():
+    X,names,scales=design(d);X=X[:12];y=d.monthly.to_numpy()[:12];p=X.shape[1]
+    def independent(z):
+        sig=np.exp(z[p]);ph=np.tanh(z[p+1]);i=np.arange(len(y))
+        cov=sig**2/(1-ph**2)*ph**np.abs(i[:,None]-i[None,:])
+        return (multivariate_normal.logpdf(y,mean=X@z[:p],cov=cov)-.5*np.sum((z[:p]/scales)**2)
+                -.5*(sig/.5)**2+z[p]+np.log1p(-ph**2))
+    z1=np.r_[np.zeros(p),np.log(.25),np.arctanh(.3)];z2=np.r_[np.ones(p)*.03,np.log(.4),np.arctanh(-.2)]
+    assert np.isclose(log_target(z1,X,y,scales)-log_target(z2,X,y,scales),independent(z1)-independent(z2),atol=1e-8)
+print('All four AR likelihoods/Jacobians agree with independent covariance calculations.')
+rng=np.random.default_rng(50);prior_rows=[];fig,axes=plt.subplots(2,2,figsize=(11,6))
+for ax,(iso,d) in zip(axes.flat,groups.items()):
+    X,names,scales=design(d);count=1500;b=rng.normal(size=(count,len(names)))*scales
+    sig=np.abs(rng.normal(0,.5,count));ph=rng.uniform(-1,1,count);res=np.empty((count,len(d)))
+    res[:,0]=rng.normal(size=count)*sig/np.sqrt(1-ph**2)
+    for t in range(1,len(d)):res[:,t]=ph*res[:,t-1]+rng.normal(size=count)*sig
+    yp=b@X.T+res;lo,hi=np.quantile(yp,[.025,.975]);prior_rows.append({'iso3':iso,'lower95':lo,'upper95':hi})
+    ax.hist(yp.ravel(),bins=80,range=(-5,5),density=True);ax.set_title(COUNTRIES[iso]);ax.set_xlabel('Monthly inflation %')
+plot_save('prior_predictive');pd.DataFrame(prior_rows).to_csv(OUT/'prior_predictive.csv',index=False)
 # %% [markdown]
-# ## Known-parameter recovery with confounding AND serial dependence
-# Synthetic data are separate. This checks implementation under its own assumptions and cannot establish
-# exchangeability for observed oil prices. True β=.15, γ=.25, φ=.4, σ=.15; prior demand drives both T and Y.
+# ## Country fits and matched confounder comparisons
+# ArviZ rank R-hat, bulk/tail ESS, MCSE and traces assess computation. A failed diagnostic is flagged.
+# Conditional country intervals are not formal country-difference tests: countries share shocks and errors.
 # %%
-rng=np.random.default_rng(81);N=300;C=np.zeros(N)
+fits={};tables=[];coefficient_rows=[];acceptance_rows=[]
+for i,(iso,d) in enumerate(groups.items()):
+    fits[iso]={}
+    for adjusted in [False,True]:
+        label='adjusted' if adjusted else 'unadjusted';X,names,scales=design(d,adjusted)
+        chains,accept=sample_model(X,d.monthly.to_numpy(),scales,seed=22+i*1000+int(adjusted)*50)
+        fits[iso][label]=chains;table=summarize(chains,names);table.insert(0,'model',label);table.insert(0,'iso3',iso);tables.append(table)
+        beta=table[table.parameter.eq('beta')].iloc[0]
+        coefficient_rows.append({'country':COUNTRIES[iso],'iso3':iso,'model':label,'beta':beta['mean'],
+                                 'lower95':beta.lower95,'upper95':beta.upper95,'sampling_pass':bool(table.sampling_pass.all())})
+        for c,rates in enumerate(accept):acceptance_rows.append({'iso3':iso,'model':label,'chain':c+1,'sigma_accept':rates[0],'phi_accept':rates[1]})
+        print(iso,label,'beta',round(beta['mean'],4),'sampling pass',bool(table.sampling_pass.all()),flush=True)
+diagnostics=pd.concat(tables,ignore_index=True);coefficients=pd.DataFrame(coefficient_rows)
+diagnostics.to_csv(OUT/'posterior_diagnostics.csv',index=False);coefficients.to_csv(OUT/'country_coefficients.csv',index=False)
+pd.DataFrame(acceptance_rows).to_csv(OUT/'sampler_acceptance.csv',index=False)
+np.savez_compressed(OUT/'posterior_draws.npz',**{iso+'_'+label:a for iso,f in fits.items() for label,a in f.items()})
+print(coefficients.round(4).to_string(index=False))
+fig,axes=plt.subplots(4,2,figsize=(12,10))
+for row,(iso,f) in enumerate(fits.items()):
+    for c in range(4):
+        axes[row,0].plot(f['adjusted'][c,:,1],lw=.3,alpha=.6);axes[row,1].plot(f['adjusted'][c,:,-1],lw=.3,alpha=.6)
+    axes[row,0].set_ylabel(iso+' beta');axes[row,1].set_ylabel(iso+' phi')
+plot_save('mcmc_traces')
+fig,ax=plt.subplots(figsize=(9,5))
+for j,label in enumerate(['unadjusted','adjusted']):
+    q=coefficients[coefficients.model.eq(label)].set_index('iso3').loc[list(COUNTRIES)]
+    ax.errorbar(q.beta,np.arange(4)+(j-.5)*.15,xerr=np.array([q.beta-q.lower95,q.upper95-q.beta]),fmt='o',label=label)
+ax.set_yticks(np.arange(4),list(COUNTRIES.values()));ax.axvline(0,color='grey',lw=.8);ax.legend()
+ax.set_xlabel('Monthly inflation percentage points per 10 pp oil change');ax.set_title('Country associations; not a country-difference test')
+plot_save('country_coefficients')
+# %% [markdown]
+# ## Separate simulation validation: seasonality, confounding and dependent errors
+# True beta=.15, gamma=.25, sigma=.15, phi=.4. Synthetic observations never enter real-data fits.
+# Recovery validates computation under known conditions, not the real-world DAG.
+# %%
+rng=np.random.default_rng(81);simdata=groups['USA'][['date','month']].copy();N=len(simdata);C=np.zeros(N)
 for i in range(1,N):C[i]=.6*C[i-1]+rng.normal(0,.5)
-T=.8*C+rng.normal(0,.7,N);Xs=np.column_stack([np.ones(N),T,C]);u=np.empty(N);u[0]=rng.normal(0,.15/np.sqrt(1-.4**2))
+simdata['C']=C;simdata['T']=.8*C+rng.normal(0,.7,N);Xs,names,scales=design(simdata)
+truth=np.r_[.2,.15,.25,np.linspace(-.15,.15,11)];u=np.empty(N);u[0]=rng.normal(0,.15/np.sqrt(1-.4**2))
 for i in range(1,N):u[i]=.4*u[i-1]+rng.normal(0,.15)
-ys=Xs@np.array([.2,.15,.25])+u
-sim,acc_s=sample_model(Xs,ys,seed=71)
-simdiag=diagnostics(sim,['alpha','beta','gamma','sigma','phi']);simdiag['truth']=[.2,.15,.25,.15,.4]
-print(simdiag.round(4).to_string(index=False));simdiag.to_csv(OUT/'simulation_recovery.csv',index=False)
-sim_u,acc_su=sample_model(Xs[:,:2],ys,seed=171)
-simudiag=diagnostics(sim_u,['alpha','beta','sigma','phi']);simudiag.to_csv(OUT/'simulation_unadjusted.csv',index=False)
-print('Omitted-confounder simulated beta:',simudiag.loc[simudiag.parameter.eq('beta'),['mean','lower95','upper95']].round(4).to_string(index=False))
+ys=Xs@truth+u;simulation=[]
+for adjusted in [False,True]:
+    X,names,scales=design(simdata,adjusted);chain,accept=sample_model(X,ys,scales,seed=171+int(adjusted)*100)
+    table=summarize(chain,names);table.insert(0,'model','adjusted' if adjusted else 'unadjusted')
+    if adjusted:
+        table['truth']=np.r_[truth,.15,.4];table['truth_in_interval']=(table.truth>=table.lower95)&(table.truth<=table.upper95)
+    simulation.append(table)
+simulation=pd.concat(simulation,ignore_index=True);simulation.to_csv(OUT/'simulation_recovery.csv',index=False)
+print(simulation[simulation.parameter.isin(['beta','gamma','sigma','phi'])].round(4).to_string(index=False))
 # %% [markdown]
-# ## Posterior predictive checks and robustness
-# Unconditional replications check dependence and distribution; conditional innovations check remaining
-# serial structure. Intervals shown are pointwise. AR(1) is a testable approximation, not a guaranteed cure.
+# ## Posterior prediction, residual checks and robustness for every country
+# Pointwise predictive intervals include seasonal mean uncertainty and dependent residuals. Plug-in
+# innovation tests and extremes expose misspecification; satisfactory sampling is not model validation.
+# HAC sensitivity regressions retain calendar effects and are not identical to Bayesian AR estimates.
 # %%
-flat=chains.reshape(-1,5);rng=np.random.default_rng(70);draw=flat[rng.choice(len(flat),2000,replace=False)]
-mu=draw[:,:3]@Xmat(d).T;rep=np.empty_like(mu);r=np.empty_like(mu)
-r[:,0]=rng.normal(size=len(draw))*draw[:,3]/np.sqrt(1-draw[:,4]**2)
-for t in range(1,300):r[:,t]=draw[:,4]*r[:,t-1]+rng.normal(size=len(draw))*draw[:,3]
-rep=mu+r;mean=flat.mean(axis=0);res=d.monthly.to_numpy()-Xmat(d)@mean[:3];innov=res[1:]-mean[4]*res[:-1]
-lb=acorr_ljungbox(innov,lags=[6,12],return_df=True);print('Innovation Ljung-Box (exploratory plug-in diagnostic):');print(lb.to_string())
-lb.to_csv(OUT/'innovation_ljung_box.csv')
-fig,ax=plt.subplots(figsize=(11,4));ax.fill_between(d.date,*np.quantile(rep,[.025,.975],axis=0),alpha=.15,label='95% predictive')
-ax.fill_between(d.date,*np.quantile(mu,[.025,.975],axis=0),alpha=.4,label='95% regression mean')
-ax.plot(d.date,mu.mean(axis=0),label='Regression mean');ax.plot(d.date,d.monthly,color='black',lw=.8,label='Observed')
-ax.set_ylabel('Monthly inflation %');ax.legend(ncol=4,fontsize=8);plot_save('posterior_predictive')
-pp=[]
-for name,fun in [('lag1',lambda a:pd.Series(a).autocorr()),('maximum',np.max),('minimum',np.min),('std',np.std)]:
-    v=np.array([fun(a) for a in rep]);obs=fun(d.monthly.to_numpy());lo,hi=np.quantile(v,[.025,.975])
-    pp.append({'statistic':name,'observed':obs,'rep_lower95':lo,'rep_upper95':hi,'fraction_rep_ge_observed':np.mean(v>=obs)})
-pp=pd.DataFrame(pp);print(pp.round(4).to_string(index=False));pp.to_csv(OUT/'predictive_checks.csv',index=False)
-robust=[]
-for label,g in [('all',d),('2000-2019',d[d.date<'2020-01-01']),('2020-2024',d[d.date>='2020-01-01']),('exclude 2020-2022',d[~d.date.dt.year.between(2020,2022)]),('exclude oil changes >30%',d[d['T'].abs()<=3])]:
-    # HAC OLS sensitivity; avoids pretending that missing segments are adjacent in an AR likelihood.
-    fit=sm.OLS(g.monthly,Xmat(g)).fit(cov_type='HAC',cov_kwds={'maxlags':12});ci=np.asarray(fit.conf_int())[1]
-    robust.append({'sample':label,'n':len(g),'beta':np.asarray(fit.params)[1],'HAC_low':ci[0],'HAC_high':ci[1]})
-robust=pd.DataFrame(robust);print(robust.round(4).to_string(index=False));robust.to_csv(OUT/'robustness.csv',index=False)
-prior_sens=[]
-for scale in [.15,.3,.6]:
-    lw=-.5*(flat[:,1]/scale)**2+.5*(flat[:,1]/.3)**2;w=np.exp(lw-lw.max());w/=w.sum()
-    idx=np.argsort(flat[:,1]);q=np.interp([.025,.975],np.cumsum(w[idx]),flat[idx,1])
-    prior_sens.append({'beta_prior_sd':scale,'beta_mean':np.sum(w*flat[:,1]),'lower95':q[0],'upper95':q[1],'importance_ESS':1/np.sum(w*w)})
-print(pd.DataFrame(prior_sens).round(4).to_string(index=False));pd.DataFrame(prior_sens).to_csv(OUT/'prior_sensitivity.csv',index=False)
+predictive=[];innovations=[];robustness=[];prior_sensitivity=[];season_rows=[];fig,axes=plt.subplots(2,2,figsize=(13,8))
+for i,(ax,(iso,d)) in enumerate(zip(axes.flat,groups.items())):
+    X,names,scales=design(d);flat=fits[iso]['adjusted'].reshape(-1,len(names)+2)
+    rng=np.random.default_rng(70+i);draw=flat[rng.choice(len(flat),1500,replace=False)];mu=draw[:,:len(names)]@X.T;r=np.empty_like(mu)
+    r[:,0]=rng.normal(size=len(draw))*draw[:,-2]/np.sqrt(1-draw[:,-1]**2)
+    for t in range(1,len(d)):r[:,t]=draw[:,-1]*r[:,t-1]+rng.normal(size=len(draw))*draw[:,-2]
+    rep=mu+r;mean=flat.mean(axis=0);res=d.monthly.to_numpy()-X@mean[:-2];innov=res[1:]-mean[-1]*res[:-1]
+    lb=acorr_ljungbox(innov,lags=[6,12],return_df=True).rename_axis('lag').reset_index();lb['iso3']=iso;innovations.append(lb)
+    for name,fun in [('lag1',lambda a:pd.Series(a).autocorr()),('maximum',np.max),('minimum',np.min),('std',np.std)]:
+        v=np.array([fun(a) for a in rep]);obs=fun(d.monthly.to_numpy());lo,hi=np.quantile(v,[.025,.975])
+        predictive.append({'iso3':iso,'statistic':name,'observed':obs,'rep_lower95':lo,'rep_upper95':hi,'fraction_rep_ge_observed':np.mean(v>=obs)})
+    ax.fill_between(d.date,*np.quantile(rep,[.025,.975],axis=0),alpha=.15,label='95% predictive')
+    ax.fill_between(d.date,*np.quantile(mu,[.025,.975],axis=0),alpha=.4,label='95% mean')
+    ax.plot(d.date,mu.mean(axis=0),lw=.8,label='Seasonal regression mean');ax.plot(d.date,d.monthly,color='black',lw=.6,label='Observed')
+    ax.set_title(COUNTRIES[iso]);ax.set_ylabel('Monthly CPI %')
+    for month in range(1,13):
+        s=flat[:,3:14]@SEASON[month-1];season_rows.append({'iso3':iso,'month':month,'mean':s.mean(),'lower95':np.quantile(s,.025),'upper95':np.quantile(s,.975)})
+    for label,g in [('all',d),('2000-2019',d[d.date<'2020-01-01']),('2020-2024',d[d.date>='2020-01-01']),('exclude 2020-2022',d[~d.date.dt.year.between(2020,2022)]),('exclude oil changes >30%',d[d['T'].abs()<=3])]:
+        fit=sm.OLS(g.monthly,design(g)[0]).fit(cov_type='HAC',cov_kwds={'maxlags':12});ci=np.asarray(fit.conf_int())[1]
+        robustness.append({'iso3':iso,'sample':label,'n':len(g),'beta':np.asarray(fit.params)[1],'HAC_low':ci[0],'HAC_high':ci[1]})
+    for scale in [.15,.3,.6]:
+        lw=-.5*(flat[:,1]/scale)**2+.5*(flat[:,1]/.3)**2;w=np.exp(lw-lw.max());w/=w.sum();idx=np.argsort(flat[:,1])
+        q=np.interp([.025,.975],np.cumsum(w[idx]),flat[idx,1]);prior_sensitivity.append({'iso3':iso,'beta_prior_sd':scale,'beta_mean':w@flat[:,1],'lower95':q[0],'upper95':q[1],'importance_ESS':1/(w@w)})
+axes[0,0].legend(fontsize=7,ncol=2);plot_save('posterior_predictive')
+pd.DataFrame(predictive).to_csv(OUT/'predictive_checks.csv',index=False)
+pd.concat(innovations,ignore_index=True).to_csv(OUT/'innovation_ljung_box.csv',index=False)
+pd.DataFrame(robustness).to_csv(OUT/'robustness.csv',index=False)
+pd.DataFrame(prior_sensitivity).to_csv(OUT/'prior_sensitivity.csv',index=False)
+pd.DataFrame(season_rows).to_csv(OUT/'seasonal_effects.csv',index=False)
+print(pd.concat(innovations,ignore_index=True).round(4).to_string(index=False))
 # %% [markdown]
-# ## Chronological prediction, kept secondary to the causal question
-# Fit coefficients and AR structure to 2000–2019 only. In 2020–2024 make one-step conditional
-# predictions using the observed previous month's residual. All series are revised and assumed available
-# at their reference-month lag; this is not a real-time publication-vintage backtest. The AR structure
-# introduces outcome history as a stochastic dependence assumption; it must appear in the temporal
-# causal explanation and may exceed a strict interpretation of the course's three-variable DAG.
+# ## Country-specific chronological predictions
+# Train once on 2000-2019, evaluate one-step predictions over 2020-2024 using observed previous residuals.
+# Seasonal coefficients are trained on training data only. Compare persistence, training calendar-month
+# means and last year's same-month inflation. Sources are revised; release delays are not reconstructed.
+# This is an exploratory retrospective comparison, not an untouched real-time forecasting experiment.
 # %%
-train=d[d.date<'2020-01-01'];test=d[d.date>='2020-01-01']
-ct,act=sample_model(Xmat(train),train.monthly.to_numpy(),seed=122)
-dt=diagnostics(ct,['alpha','beta','gamma','sigma','phi']);dt.to_csv(OUT/'training_diagnostics.csv',index=False)
-print('Training-model diagnostics:');print(dt.round(4).to_string(index=False))
-bt=ct.reshape(-1,5).mean(axis=0);allmu=Xmat(d)@bt[:3];allr=d.monthly.to_numpy()-allmu
-conditional=allmu[240:]+bt[4]*allr[239:-1]
-preds={'training mean':np.repeat(train.monthly.mean(),60),'last-month inflation':test.last_monthly.to_numpy(),'Bayesian adjusted AR1':conditional}
-f=sm.OLS(train.monthly,Xmat(train)).fit();preds['adjusted independent errors']=Xmat(test)@np.asarray(f.params)
-metrics=[]
-for label,pred in preds.items():
-    err=test.monthly.to_numpy()-pred;metrics.append({'model':label,'test_n':60,'MAE':np.abs(err).mean(),'RMSE':np.sqrt(np.mean(err**2))})
-metrics=pd.DataFrame(metrics);print(metrics.round(4).to_string(index=False));metrics.to_csv(OUT/'holdout_metrics.csv',index=False)
-plt.plot(test.date,test.monthly,color='black',label='Observed');plt.plot(test.date,conditional,label='Adjusted AR1');plt.plot(test.date,test.last_monthly,alpha=.6,label='Last month')
-plt.ylabel('Monthly inflation %');plt.legend();plot_save('holdout_predictions')
+metrics=[];training=[];orders=[];fig,axes=plt.subplots(2,2,figsize=(13,7))
+for i,(ax,(iso,d)) in enumerate(zip(axes.flat,groups.items())):
+    train=d[d.date<'2020-01-01'];test=d[d.date>='2020-01-01'];X,names,scales=design(train)
+    chain,accept=sample_model(X,train.monthly.to_numpy(),scales,seed=122+i*1000)
+    dt=summarize(chain,names);dt['iso3']=iso;training.append(dt);bt=chain.mean(axis=(0,1))
+    allmu=design(d)[0]@bt[:-2];allr=d.monthly.to_numpy()-allmu;conditional=allmu[240:]+bt[-1]*allr[239:-1]
+    preds={'training mean':np.repeat(train.monthly.mean(),len(test)),'last-month inflation':test.last_monthly.to_numpy(),
+           'training calendar-month mean':test.month.map(train.groupby('month').monthly.mean()).to_numpy(),
+           'same month last year':test.last_year_same_month.to_numpy(),'Bayesian seasonal adjusted AR1':conditional,
+           'seasonal adjusted independent errors':design(test)[0]@np.asarray(sm.OLS(train.monthly,X).fit().params)}
+    for label,pred in preds.items():
+        err=test.monthly.to_numpy()-pred;metrics.append({'iso3':iso,'model':label,'train_n':len(train),'test_n':len(test),'MAE':np.abs(err).mean(),'RMSE':np.sqrt(np.mean(err**2))})
+    ax.plot(test.date,test.monthly,color='black',lw=.8,label='Observed');ax.plot(test.date,conditional,label='Seasonal AR1')
+    ax.plot(test.date,preds['training calendar-month mean'],alpha=.6,label='Training-month mean');ax.set_title(COUNTRIES[iso])
+    for order in [1,2,3]:
+        fit=SARIMAX(d.monthly,exog=design(d)[0],trend='n',order=(order,0,0)).fit(disp=False,maxiter=200)
+        orders.append({'iso3':iso,'AR_order':order,'AIC':fit.aic,'beta':np.asarray(fit.params)[1],
+                       'optimizer_converged':bool(fit.mle_retvals.get('converged',False)),
+                       'innovation_LB_p12':acorr_ljungbox(fit.resid,lags=[12],return_df=True).lb_pvalue.iloc[0]})
+    print('Completed training/holdout:',iso,flush=True)
+axes[0,0].legend(fontsize=7);plot_save('holdout_predictions')
+metrics=pd.DataFrame(metrics);metrics.to_csv(OUT/'holdout_metrics.csv',index=False)
+training=pd.concat(training,ignore_index=True);training.to_csv(OUT/'training_diagnostics.csv',index=False)
+pd.DataFrame(orders).to_csv(OUT/'AR_order_sensitivity.csv',index=False)
+print(metrics.round(4).to_string(index=False))
 # %% [markdown]
-# ## What these checks cannot establish
-# Good sampling or improved prediction does not prove causality. Oil prices contain supply and demand
-# movements. One lagged shipping-based proxy need not block global demand, expectations, supply-chain,
-# policy, exchange-rate, or other paths. A single country's time series has policy feedback and changing
-# regimes. Correlation strength neither proves nor disproves confounding. This exploratory comparison
-# does not turn adjustment into an identified causal effect, and outcome/model revisions used the same
-# historical data. Do not call the 2020–2024 period an untouched confirmatory holdout.
-#
-# This notebook covers feasibility and model validation, not a submission-ready causal analysis. The
-# accompanying docs/PROJECT_PLAN.md gives the recommendation, exact scope, and course requirements.
-# %% [markdown]
-# ## Independent implementation checks and additional dependence sensitivity
-# Cross-check the hand-written likelihood against a multivariate Normal AR(1) covariance, and
-# use ArviZ's built-in rank-based diagnostics. Additional AR orders below are frequentist sensitivity
-# checks, not a search that establishes a causal model or a substitute for Bayesian prior validation.
+# ## Interpretation and remaining work
+# Read coefficients, sampling diagnostics and predictive checks together. Country intervals are conditional
+# associations, not proof of causal oil effects or country differences. National CPI baskets, exchange
+# rates, subsidies, policy regimes, omitted demand paths and shared shocks limit the interpretation.
+# Four histories do not create 1,200 independent global shocks. Calendar-month effects may leave moving
+# holiday and changing-seasonality effects. Gaussian tail and residual failures must remain visible;
+# a Student-t extension is future work. See [the project plan](../docs/PROJECT_PLAN.md).
 # %%
-import arviz as az
-from scipy.stats import multivariate_normal
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-azdata=az.from_dict(posterior={name:chains[:,:,j] for j,name in enumerate(['alpha','beta','gamma','sigma','phi'])})
-azsummary=az.summary(azdata,hdi_prob=.95,round_to=5)
-print('ArviZ built-in diagnostics:');print(azsummary.to_string());azsummary.to_csv(OUT/'arviz_diagnostics.csv')
-assert (azsummary.r_hat<1.01).all() and (azsummary.ess_bulk>400).all()
-Xs=Xmat(d)[:12];ys=d.monthly.to_numpy()[:12];lp=target_factory(Xs,ys)
-def independent_logp(z):
-    b=z[:3];sig=np.exp(z[3]);phi=np.tanh(z[4]);i=np.arange(len(ys))
-    cov=sig**2/(1-phi**2)*phi**np.abs(i[:,None]-i[None,:])
-    return (multivariate_normal.logpdf(ys,mean=Xs@b,cov=cov)
-            -.5*np.sum((b/np.array([.5,.3,.5]))**2)-.5*(sig/.5)**2+z[3]+np.log1p(-phi**2))
-z1=np.array([.2,.1,.05,np.log(.25),np.arctanh(.3)])
-z2=np.array([.1,.15,-.03,np.log(.4),np.arctanh(-.2)])
-assert np.isclose(lp(z1)-lp(z2),independent_logp(z1)-independent_logp(z2),atol=1e-9)
-print('AR1 likelihood and transformation Jacobians agree with independent covariance calculation.')
-orders=[]
-for order in [1,2,3]:
-    r=SARIMAX(d.monthly,exog=d[['T','C']],trend='c',order=(order,0,0)).fit(disp=False)
-    orders.append({'AR_order':order,'AIC':r.aic,'beta':r.params['T'],
-                   'innovation_LB_p12':acorr_ljungbox(r.resid,lags=[12],return_df=True).lb_pvalue.iloc[0]})
-orders=pd.DataFrame(orders);print(orders.round(5).to_string(index=False));orders.to_csv(OUT/'AR_order_sensitivity.csv',index=False)
-# %% [markdown]
-# ## Working direction and findings
-# Proceed with the focused monthly US oil-inflation study. Keep the three substantive variables,
-# state the causal assumptions explicitly, and treat the current Gaussian AR(1) model as a baseline.
-# The next modeling step is to test Student-t innovations and repeat validation; that work is not complete.
-#
-# - Adjusted oil association: **0.0945** monthly inflation percentage points per 10-percentage-point
-#   higher oil change, with model-conditional 95% equal-tailed credible interval **[0.0602, 0.1284]**.
-# - Unadjusted association: **0.0936**. The small change does not demonstrate sufficient causal adjustment.
-# - Simulation recovers **0.1498** for a true **0.1500**, validating computation under assumed conditions.
-# - Dependence remains (12-lag innovation diagnostic p around **0.0025**) and negative-tail prediction fails.
-# - Retrospective RMSE: **0.3221** for AR(1), **0.3158** for last-month inflation. Prediction is secondary.
-# - Built-in ArviZ diagnostics pass; this establishes sampling quality, not causal identification.
-#
-# See [the project plan](../docs/PROJECT_PLAN.md) for scope and remaining work. The empirical result
-# supports a positive association; a causal interpretation depends on strong, unverified assumptions.
+failures={'full_data':int((~diagnostics.sampling_pass).sum()),'training':int((~training.sampling_pass).sum()),
+          'simulation':int((~simulation.sampling_pass).sum())}
+print('Sampling diagnostic failures:',failures)
+if any(failures.values()):
+    raise RuntimeError('Inspect saved sampling diagnostics before interpreting results.')
+print('All chains: R-hat < 1.01, bulk/tail ESS > 400. This validates sampling, not causality.')
+(OUT/'FINDINGS.md').write_text('# Four-country model results\n\n```text\n'+coefficients.round(5).to_string(index=False)+'\n```\n\n'
+    'Unadjusted monthly CPI with country-specific calendar-month effects, separate Gaussian AR(1) models. '
+    'Intervals are conditional associations, not identified causal effects or country-difference tests. '
+    'Inspect residual, predictive, robustness and holdout tables for limitations.\n',encoding='utf-8')
+lb=pd.read_csv(OUT/'innovation_ljung_box.csv')
+pp=pd.read_csv(OUT/'predictive_checks.csv')
+with (OUT/'FINDINGS.md').open('a',encoding='utf-8') as report:
+    report.write('\n## Model checks\n\nAll full-data, training and simulation sampling checks pass. '
+                 'This does not imply adequate residual or tail behavior.\n\n')
+    for iso,name in COUNTRIES.items():
+        p12=lb[(lb.iso3==iso)&(lb.lag==12)].lb_pvalue.iloc[0]
+        extreme=pp[(pp.iso3==iso)&pp.statistic.isin(['minimum','maximum'])]
+        misses=extreme[(extreme.observed<extreme.rep_lower95)|(extreme.observed>extreme.rep_upper95)]
+        tail=', '.join(misses.statistic) if len(misses) else 'none in these two checks'
+        report.write(f'- {name}: 12-lag innovation p={p12:.4f}; extreme-statistic misses: {tail}.\n')
+    report.write('\n## Retrospective holdout RMSE, 2020–2024\n\n')
+    for iso,name in COUNTRIES.items():
+        m=metrics[metrics.iso3.eq(iso)]
+        model=m[m.model.eq('Bayesian seasonal adjusted AR1')].RMSE.iloc[0]
+        simple=m[m.model.isin(['training mean','last-month inflation','training calendar-month mean','same month last year'])].sort_values('RMSE').iloc[0]
+        report.write(f'- {name}: seasonal demand-adjusted AR1 {model:.4f}; best simple benchmark '
+                     f'{simple.RMSE:.4f} ({simple.model}).\n')
+    report.write('\nThese are exploratory one-step predictions from revised data with training-only '
+                 'seasonal coefficients. They are not real-time vintage forecasts or a controlled '
+                 'test of oil information alone: the benchmarks differ in more than the oil predictor. '
+                 'No no-oil AR counterfactual forecast model or joint country-difference test is fitted. '
+                 'Gaussian model failures and imperfect demand adjustment remain. Student-t errors '
+                 'and moving-holiday treatment are future work.\n')
