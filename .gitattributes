@@ -3,6 +3,7 @@
 *.md text eol=lf
 *.json text eol=lf
 *.ipynb text eol=lf
-data/raw/*.csv -text
+# Keep official snapshots byte-for-byte, including provider line endings.
+data/raw/*.csv -text -diff
 *.png binary
 *.npz binary
