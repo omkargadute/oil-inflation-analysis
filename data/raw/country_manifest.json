@@ -1,0 +1,16 @@
+[
+  {
+    "file": "oecd_country_cpi_1999.csv",
+    "flow": "DSD_PRICES@DF_PRICES_ALL",
+    "url": "https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&endPeriod=2024-12&format=csvfile",
+    "retrieved_utc": "2026-11-14T00:29:34.173855+00:00",
+    "sha256": "cbbdf625998ccbd674a2bb8684c01a51ab734767099299b7e93df6b0ce4eb70c"
+  },
+  {
+    "file": "oecd_country_cpi_2018.csv",
+    "flow": "DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL",
+    "url": "https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&endPeriod=2024-12&format=csvfile",
+    "retrieved_utc": "2026-11-14T00:29:36.588972+00:00",
+    "sha256": "20371f1d87f97fbc43861213deebff19ad5d4e711ded3f4dc2fbef991581a8f7"
+  }
+]

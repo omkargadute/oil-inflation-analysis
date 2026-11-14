@@ -6,6 +6,7 @@ A three-variable Bayesian analysis of monthly Brent price changes, subsequent US
 
 - [Executed notebook](notebooks/oil_inflation.ipynb): data checks, simulation recovery, Bayesian estimation, diagnostics, prediction, and robustness.
 - [Project plan](docs/PROJECT_PLAN.md): research question, assumptions, completed work, and next steps.
+- [Country availability audit](docs/COUNTRY_AVAILABILITY.md): verified China/Japan coverage and other candidates; requirements for comparable international analysis.
 - [Analysis source](analysis/oil_inflation.py): the notebook's executable cells.
 - [Results](results/): diagnostic tables and figures.
 
