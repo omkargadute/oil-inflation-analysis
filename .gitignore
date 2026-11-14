@@ -1,0 +1,13 @@
+.local-archive/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.env
+.env.*
+!.env.example
+docs/course_requirements.pdf
+results/*.npz
+.DS_Store
+Thumbs.db

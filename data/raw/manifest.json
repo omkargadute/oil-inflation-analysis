@@ -1,0 +1,20 @@
+[
+  {
+    "file": "brent_direct.csv",
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MCOILBRENTEU",
+    "retrieved_utc": "2026-11-13T23:55:19.575411+00:00",
+    "sha256": "03464a725626ee6a1d3f544cae3510bda479e7af5e1ea31c2f17e61ea6d42f28"
+  },
+  {
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IGREA",
+    "retrieved_utc": "2026-11-14T00:06:53.414178+00:00",
+    "sha256": "c21997caf4bf1f5a9670c424f44ea90558e9dbf953610274f26e3fc9b65bdeb0",
+    "file": "igrea.csv"
+  },
+  {
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+    "retrieved_utc": "2026-11-14T00:09:52.274060+00:00",
+    "sha256": "c9be2d4909ffd28d91f07df5d113151b0fe7ba602144ee6fd453d3bc8426efde",
+    "file": "us_cpi_seasonally_adjusted.csv"
+  }
+]
