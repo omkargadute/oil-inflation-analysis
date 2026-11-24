@@ -33,9 +33,9 @@ else:
         '## Appendix. Computational implementation\n\n'
         'The following source is included for code-inclusive exports and review. '
         'It is imported by the executed analysis above; these listings do not refit models.'))
-    for module in ['analysis/data.py', 'analysis/model.py', 'analysis/robust_model.py',
-                   'analysis/extension_model.py', 'analysis/compiled_sampler.py', 'analysis/strengthening.py',
-                   'analysis/latest_data.py','analysis/latest_sampler.py','analysis/latest_model.py','analysis/latest_analysis.py']:
+    for module in ['analysis/data.py','analysis/model.py','analysis/robust_model.py',
+                   'analysis/extension_model.py','analysis/compiled_sampler.py','analysis/latest_data.py',
+                   'analysis/combined_sampler.py','analysis/combined_model.py','analysis/combined_analysis.py']:
         cells.append(nbformat.v4.new_markdown_cell(
             '### '+module+'\n\n```python\n'+(root/module).read_text(encoding='utf-8')+'\n```',
             metadata={'tags':['implementation-appendix']}))

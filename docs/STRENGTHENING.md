@@ -1,5 +1,7 @@
 # Model-strengthening experiments
 
+**Historical 2000–2024 study:** current real-data comparisons run through October 2026 using the [combined implementation](COMBINED_NOTEBOOK.md), with main results in `results/combined_project/`. Earlier outputs remain references; the 40-dataset synthetic stress study remains part of validation.
+
 Run `.\.venv\Scripts\python.exe scripts/run_strengthening.py`, then rebuild the final notebook with `scripts/build_notebook.py`. Results are saved in `results/strengthening/`; the notebook displays the comparisons alongside the original analysis. The first run compiles and fits models; subsequent runs reuse content-addressed local caches. No source data are downloaded or altered by the experiment suite.
 
 ## Comparable likelihoods

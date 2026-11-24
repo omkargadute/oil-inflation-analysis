@@ -1,29 +1,19 @@
 # Oil prices and inflation across four countries
 
-A Bayesian comparison of **the United States, China, Japan and Canada**, January 2000–December 2024. Each country has 300 complete monthly observations. Separate country models use the same three substantive variables: lagged Brent price changes, subsequent monthly CPI inflation, and prior global economic activity.
+The final analysis uses **January 2000–October 2026** for the United States, China, Japan and Canada: 322 months per country, 1,288 calendar rows and 1,286 observed monthly inflation outcomes. All main descriptive charts, Bayesian estimates and robustness checks use this combined period. Forecasts use chronological training samples and evaluate later observations through October 2026.
 
 ## Start here
 
-- [Current-release extension](docs/LATEST_DATA.md): verified monthly data through October 2026, daily Brent through November 17, calendar-safe handling of missing US October 2025 CPI, updated coefficients and fixed-training recent forecasts. The original 2000–2024 study remains a reproducible reference.
-- [Model-strengthening findings](results/strengthening/FINDINGS.md): dependence/tail comparisons, three rolling windows, 40 independent simulation datasets, lag/period sensitivity and retained-outlier audit.
+- [Final executed notebook](notebooks/final_project.ipynb): nine sections covering data, EDA, causal assumptions, priors, synthetic validation, main training, posterior checks, chronological prediction and findings.
+- [Combined-notebook guide](docs/COMBINED_NOTEBOOK.md): dataset, missing-state likelihood, model comparisons, outputs and reproduction.
+- [Current findings](results/combined_project/FINDINGS.md) and [country estimates](results/combined_project/country_estimates.csv).
+- [Jupyter setup](docs/NOTEBOOK_SETUP.md) and [project plan](docs/PROJECT_PLAN.md).
 
-- [Completed computational notebook](notebooks/final_project.ipynb): all nine report sections, Gaussian/Student-t estimation, synthetic validation, posterior checks, sensitivity, matched no-oil forecasts, and conclusions. The appendix includes the shared computational source.
-- [Jupyter setup and workflow](docs/NOTEBOOK_SETUP.md): isolated `.venv`, dedicated kernel, launch and rebuild commands.
-- [Exploratory notebook](notebooks/oil_inflation.ipynb): earlier four-country fits, simulation recovery, diagnostics and holdout comparisons; retained as a reference, not the final submission.
-- [Project plan](docs/PROJECT_PLAN.md): estimand, common specification, assumptions and course limitations.
-- [Final report source](analysis/final_project.py), [Gaussian model](analysis/model.py), and [Student-t model and evaluation](analysis/robust_model.py).
-- [Current findings](results/final_project/FINDINGS.md), [country estimates](results/final_project/country_estimates.csv), and [matched oil/no-oil forecast comparison](results/final_project/oil_forecast_comparison.csv).
-- [Country availability audit](docs/COUNTRY_AVAILABILITY.md): broader 17-country coverage check.
+Separate country models use three substantive constructs: previous-month Brent price changes, monthly CPI inflation, and earlier global activity. Every country uses **unadjusted national all-items CPI**, with consistent calendar-month effects. Shared oil histories are not independent country exposures. Estimates remain conditional associations without sufficient causal-identification assumptions.
 
-## Consistent seasonality treatment
+Missing US October 2025 CPI makes October and November monthly growth undefined. Raw gaps remain missing. Gaussian and Student-t AR models integrate these unknown outcomes as latent states during fitting, preserving later observations and the calendar. Forecast scoring never uses latent test outcomes as observed histories. The 2000–2024 estimates are a labeled historical comparison, not the main dataset.
 
-All four countries use **unadjusted national all-items CPI**, with calendar-month effects estimated separately within each country. We do not mix adjusted US data with unadjusted Chinese/Japanese data. Both confounder comparisons retain the same seasonal terms; only global-activity adjustment differs. This model estimates recurring monthly structure, not an officially adjusted CPI series. Moving holidays, changing seasonality and national index definitions remain limitations.
-
-The completed analysis compares Gaussian AR(1) errors with Student-t innovations at fixed five degrees of freedom. All 32 simulation/full-data/training fits pass sampling checks; model adequacy remains imperfect. Heavy tails help some extreme-value checks but leave residual dependence. Matched Student-t forecasts improve with oil in China, show negligible/mixed change in Japan, and worsen in the US and Canada over 2020–2024. These exploratory predictive results do not identify causal effects.
-
-Shared oil and demand histories mean the 1,200 rows are dependent. Country intervals are not a test of country differences. Student-t initial residuals have matched AR variance, not an asserted exact stationary t-AR distribution. Degrees of freedom, seasonality, omitted confounding and regime changes remain limitations. Submission-PDF pagination and the group screencast are separate deliverables.
-
-## Set up Jupyter and reproduce
+## Reproduce
 
 Python 3.11 was used. From the repository root:
 
@@ -32,50 +22,43 @@ Python 3.11 was used. From the repository root:
 .\scripts\start_jupyter.ps1
 ```
 
-Open `notebooks/final_project.ipynb` with **Python (Oil Inflation Project)**. The setup script uses `requirements-lock.txt` when available, checks dependencies and registers the local kernel; activation is optional.
+Choose **Python (Oil Inflation Project)** and open `notebooks/final_project.ipynb`.
 
-Rebuild the active report with `.\.venv\Scripts\python.exe scripts/build_notebook.py`. To reproduce the earlier full exploratory run instead, add `--target exploratory`; that slower run fits four chains per country/model and separate simulations. Development-report outputs are stored separately in `results/final_project/`.
+```powershell
+.\.venv\Scripts\python.exe -m analysis.combined_analysis
+.\.venv\Scripts\python.exe scripts/build_notebook.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
 
-Final fits use a local content-addressed cache in `.local-archive/final-model-cache/`, keyed to model code, data, priors and sampler settings. A clean clone fits all models on its first run; unchanged subsequent runs reuse them transparently. To precompute fits, run `.\.venv\Scripts\python.exe scripts/fit_final_models.py`. Run independent density tests with `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`.
+Precomputation is optional; the notebook fits models itself. The first run compiles and samples; unchanged runs reuse a content-addressed cache in `.local-archive/combined-model-cache/`. Every retained parameter and latent outcome must pass R-hat and effective-sample-size checks. Saved snapshots make notebook execution independent of network access.
 
-Inputs are included; reproduction needs no external data requests. To explicitly refresh snapshots, run `.\.venv\Scripts\python.exe scripts/download_data.py --refresh`, then rerun the coverage audit and the desired notebook. Revisions can change results.
+To deliberately fetch newer releases, run `.\.venv\Scripts\python.exe scripts/download_latest.py`, inspect the availability/missingness audit, and review the notebook's frozen October 2026 endpoint before rebuilding. The older `download_data.py --refresh` retains the historical OECD query cutoff and is not the current-data workflow.
 
 ## Structure
 
 ```text
-analysis/oil_inflation.py                 Four-country analysis cells
-analysis/final_project.py                 Completed computational report source
-analysis/data.py                          Verified calendar-aligned data preparation
-analysis/model.py                         Seasonal AR(1) likelihood and sampler
-analysis/robust_model.py                  Student-t sampler, cache and predictive evaluation
-analysis/strengthening.py                 Five model-strengthening experiment families
-analysis/latest_data.py                   Current snapshot verification and gap-preserving preparation
-analysis/latest_model.py                  Segmented AR1 likelihood and recent forecasts
-analysis/latest_analysis.py               Current-release analysis and generated findings
-notebooks/final_project.ipynb              Executed nine-section computational report
-notebooks/oil_inflation.ipynb              Earlier exploratory analysis
-scripts/                                 Source verification, audit, notebook builder
-data/raw/                                Global predictors and OECD CPI snapshots/provenance
-data/processed/multicountry_monthly.csv    Main four-country analysis panel
-data/processed/country_cpi_candidate_panel.csv  Broader availability-audit panel
-results/final_project/                   Current final computational report outputs
-results/strengthening/                   Matched conditional robustness experiments
-results/latest/                          Current-release results and source/gap/revision audits
-results/                                 Earlier exploratory outputs and coverage audit
-docs/PROJECT_PLAN.md                      Scope, statistical model and limitations
-requirements.txt                         Reproduction dependencies
-requirements-dev.txt                     Jupyter development dependencies
-requirements-lock.txt                    Resolved isolated environment
+analysis/final_project.py                   Final notebook source in percent-cell format
+analysis/combined_sampler.py                Gaussian/Student-t sampler with latent missing outcomes
+analysis/combined_model.py                  Fitting, posterior checks and calendar-safe forecasts
+analysis/combined_analysis.py               Combined-period comparison suite
+analysis/latest_data.py                     Current snapshots and gap-preserving transformations
+notebooks/final_project.ipynb                Final executed notebook
+data/raw/latest/                            Current official snapshots and byte hashes
+data/processed/multicountry_monthly.csv      Main combined dataset
+data/processed/multicountry_monthly_latest.csv  Same calendar, compatibility export
+results/combined_project/                   Current results, figures and fit diagnostics
+results/latest/                            Source audits and earlier extension results
+results/strengthening/                     Earlier robustness and 40-dataset simulation study
+results/final_project/                     Earlier computational report, historical reference
 ```
 
-The prior US-only analysis and outputs are retired; a local ignored archive preserves them. Interest rates are reserved for future work.
+Earlier exploratory notebooks/scripts are historical references; their dates and estimates are not the combined final results. The code-inclusive submission PDF and group screencast remain separate deliverables.
 
-## Sources and attribution
+## Sources
 
-The expanded [strengthening experiments](docs/STRENGTHENING.md) test dependence, tail shape, three rolling prediction windows, repeated simulation recovery, and lag/period sensitivity. Run `.\.venv\Scripts\python.exe scripts/run_strengthening.py` to precompute them. Tables, diagnostic plots and generated findings are in `results/strengthening/` and are displayed in the final notebook. These matched conditional fits use a common 13-month history and retain the original causal limitations.
+- CPI: [OECD Data Explorer](https://data-explorer.oecd.org/), monthly national all-items unadjusted indices. US/China use COICOP 1999; Japan/Canada use COICOP 2018, without within-country splicing.
+- Monthly Brent: [EIA via FRED, MCOILBRENTEU](https://fred.stlouisfed.org/series/MCOILBRENTEU).
+- Daily Brent, context only: [DCOILBRENTEU](https://fred.stlouisfed.org/series/DCOILBRENTEU).
+- Activity: [Dallas Fed via FRED, IGREA](https://fred.stlouisfed.org/series/IGREA), not GDP growth.
 
-- CPI: [OECD Data Explorer](https://data-explorer.oecd.org/), national all-items, monthly unadjusted indices. US/China use the COICOP 1999 flow; Japan/Canada use the COICOP 2018 flow. Each country uses a single complete series without cross-flow splicing.
-- Brent: [EIA via FRED, MCOILBRENTEU](https://fred.stlouisfed.org/series/MCOILBRENTEU).
-- Global activity: [Dallas Fed via FRED, IGREA](https://fred.stlouisfed.org/series/IGREA), a shipping-based industrial-commodity activity proxy, not GDP growth.
-
-Exact source URLs, recorded retrieval timestamps and SHA-256 hashes are in `data/raw/manifest.json` and `data/raw/country_manifest.json`. Source data retain their providers' applicable terms; no blanket license is asserted over third-party data. This study uses revised observations and does not reconstruct real-time publication vintages.
+URLs, retrieval timestamps and SHA-256 hashes are in `data/raw/latest/manifest.json`. Official CSV bytes are preserved by Git attributes. Source data retain provider terms; no blanket license is asserted over third-party data. Revised snapshots do not reconstruct real-time vintages.

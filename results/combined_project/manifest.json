@@ -1,0 +1,10 @@
+{
+  "completed": true,
+  "endpoint": "2026-10-01",
+  "rows": 1288,
+  "observed_outcomes": 1286,
+  "fit_cases": 132,
+  "unique_keys": 128,
+  "all_sampling_pass": true,
+  "missing_model": "Bayesian integration of missing monthly outcomes; conditional 13-month prefix"
+}

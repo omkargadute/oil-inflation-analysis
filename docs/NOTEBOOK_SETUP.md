@@ -50,6 +50,8 @@ That run is slower and updates the existing exploratory results. `--build-only` 
 
 ## Current progress
 
+**Current final notebook:** the main analysis uses January 2000–October 2026 with Bayesian integration of missing US monthly outcomes. Precompute with `.\.venv\Scripts\python.exe -m analysis.combined_analysis`; outputs are in `results/combined_project/`, caches in `.local-archive/combined-model-cache/`. See [COMBINED_NOTEBOOK.md](COMBINED_NOTEBOOK.md). The baseline/extension notes below describe retained historical implementations.
+
 The notebook includes the [current-release extension](LATEST_DATA.md), with saved monthly data through October 2026. To explicitly refresh its separately versioned inputs, use `.\.venv\Scripts\python.exe scripts/download_latest.py`; to precompute its 12 fits and recent evaluation, use `.\.venv\Scripts\python.exe -m analysis.latest_analysis`. Notebook execution itself makes no download requests. The extension handles the missing US CPI month explicitly and has its own `.local-archive/latest-model-cache/`.
 
 The final notebook also runs the five experiment families documented in [STRENGTHENING.md](STRENGTHENING.md). Precompute them with `.\.venv\Scripts\python.exe scripts/run_strengthening.py`. Their independent cache is `.local-archive/strengthening-cache/`; model code, data, settings and Numba backend version determine fit keys. Initial JIT compilation can take about a minute, followed by the experiment fits. Saved tables and plots are in `results/strengthening/`. Unchanged completed suites read saved results after verifying source/data signatures.

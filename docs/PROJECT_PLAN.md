@@ -1,77 +1,42 @@
 # Four-country oil–inflation project plan
 
-## Scope and question
+## Final scope
 
-**Current-release extension:** the final notebook now also analyzes January 2000–October 2026 from separately verified current snapshots. See [LATEST_DATA.md](LATEST_DATA.md) for the US October 2025 CPI gap, the segmented conditional likelihood, historical-revision audit, and pre-2025-trained forecasts of 2025 onward. The 2000–2024 specification and outputs below remain the original reference. Daily Brent through November 17 provides recent context; it does not replace monthly treatment measurements.
+**United States, China, Japan and Canada; January 2000–October 2026.** One combined calendar supports EDA, main estimation and robustness: 1,288 country-month rows and 1,286 observed monthly inflation outcomes. See [COMBINED_NOTEBOOK.md](COMBINED_NOTEBOOK.md) and [current findings](../results/combined_project/FINDINGS.md).
 
-**United States, China, Japan and Canada, January 2000–December 2024.** Fit the same model separately in each country, using 300 complete months per country. International comparison is part of the analysis; interest rates are future work.
+Question: how does a 10-percentage-point higher monthly Brent change relate to next-month monthly CPI inflation, accounting for prior global activity? Country models are separate; shared global histories are not independent country shocks. Interest rates remain future work.
 
-Question: under the proposed causal assumptions, how does a 10-percentage-point higher monthly oil-price change affect next-month monthly CPI inflation, accounting for prior global economic activity? How do the model-conditional estimates vary across these countries?
-
-| Role | Common definition |
+| Construct | Definition |
 |---|---|
-| Treatment T | Brent monthly percentage change in t−1, divided by 10 |
-| Outcome Y | 100 × (unadjusted CPI_t / CPI_(t−1) − 1), not annualized |
-| Potential confounder C | IGREA in t−2, divided by 100 |
+| T | Brent monthly percentage change in t−1, divided by 10 |
+| Y | 100 × (unadjusted CPI_t / CPI_(t−1) − 1), monthly, not annualized |
+| C | IGREA in t−2, divided by 100 |
 
-Candidate DAG: C→T, C→Y, T→Y. Timing and one imperfect demand proxy do not establish sufficient adjustment. Observed oil movements combine demand and supply events. The USD oil treatment is not a local-currency energy-cost measure.
+The DAG is C→T, C→Y, T→Y. Consistency, overlap, adequate temporal structure and sufficient confounding control are substantive assumptions. Exchange rates, taxes, subsidies, expectations, supply constraints and policy feedback can violate identification. Results are conditional associations unless those assumptions hold.
 
-## Consistent four-country measurement
+## Measurement and model
 
-Use national monthly all-items CPI indices from OECD, unadjusted for **every country**, including the US. US/China: `DSD_PRICES@DF_PRICES_ALL`; Japan/Canada: `DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL`. No within-country old/new series splicing, interpolation or missing-month filling. Data begin in 1999 for transformations; the analysis uses 2000–2024.
+All countries use national all-items unadjusted CPI and 11 orthonormal month contrasts. US/China use OECD COICOP 1999; Japan/Canada use COICOP 2018, with no within-country splicing. Brent is nominal USD exposure; IGREA is a shipping-based proxy, not GDP growth. Revised reference-month snapshots are not real-time vintages.
 
-The previous officially adjusted US CPI model is a retired baseline. Its numerical results must not be quoted as results of the new model. CPI baskets, coverage and classification differ across countries even with common index reference years.
+Gaussian and Student-t AR1 regressions retain/omit only C for the adjustment comparison. Stable AR2, multiplicative seasonal AR, and nu=3/5/10 provide sensitivities. Established monthly-unit priors are retained. Every family conditions on the same first 13 observed months, avoiding an unsupported stationary Student-t initial density.
 
-## Statistical model
+Missing October 2025 US CPI implies two unknown monthly outcomes. They remain missing in the dataset and are integrated during fitting with exact Gaussian conditional updates under the scale mixture. Later observations are retained. Forecasts require observed targets and required observed lag histories. The known two-month index-level constraint is not additionally modeled.
 
-Estimate independently for each country i:
+## Validation
 
-    Y_it = alpha_i + beta_i T_t + gamma_i C_t + s_i,month(t) + u_it
-    u_it = phi_i u_i,t−1 + epsilon_it
-    epsilon_it ~ Normal(0, sigma_i²)
-    u_i0 ~ Normal(0, sigma_i²/(1−phi_i²)), |phi_i| < 1
+1. Verify hashes, definitions, keys, calendars, missingness and pre-treatment timing.
+2. Describe the combined period and conditional prior predictions.
+3. Train full-period Gaussian/Student-t models with/without C; assess every parameter and latent-state chain.
+4. Recover known parameters in independent Gaussian/Student-t data; inspect 40 repeated synthetic datasets across confounding/persistence scenarios.
+5. Evaluate posterior replications, extremes and calendar-aware residual dependence.
+6. Compare chronological forecasts in 2010–2014, 2015–2019 and 2020–October 2026. Compare oil/no-oil and dependence variants on identical eligible months, using paired calendar-block uncertainty.
+7. Evaluate 2025 onward using pre-2025 training. Show through-2024 coefficients only as historical references.
+8. Report full-period tail, lag, period and prior sensitivity without selecting by oil significance. Single-lag estimates are not cumulative effects.
 
-Twelve calendar-month effects sum to zero and are represented by 11 orthonormal Helmert contrasts. They model recurring seasonality within the likelihood, not an official seasonal adjustment. Their estimates are country-specific. The unadjusted model removes C only, retaining the same calendar structure and priors.
+Good sampling does not establish model adequacy or causality. Missing-state integration is model dependent. Short recent windows, imperfect demand measurement, revised inputs and inspected comparisons limit predictive conclusions. October oil exposures require November inflation to observe the next-month response.
 
-Independent working priors: alpha~Normal(0,0.5²), beta~Normal(0,0.3²), gamma~Normal(0,0.5²), each seasonal contrast~Normal(0,0.5²), sigma~HalfNormal(0.5), phi~Uniform(−1,1). These are fixed unit scales, shared across countries; external justification is provisional. Prior prediction and beta-prior sensitivity are included.
+The three substantive constructs are preserved; seasonality/dynamics add statistical complexity that must be justified under the course scope. No formal causal country ranking is implemented.
 
-The completed report compares Gaussian errors with Student-t innovations at fixed nu=5. Student-t initial residuals are independently t_5 with scale sigma/sqrt(1−phi²): this matches stationary variance, not the exact t-AR stationary distribution. Sigma is a scale; its Student-t innovation SD is sigma*sqrt(5/3), so equal scale priors imply larger innovation-variance priors in that family. The Student-t sampler uses Normal/Gamma augmentation (shape/rate), exact Gaussian coefficient Gibbs draws, and transformed sigma/phi Metropolis updates including Jacobians. Four chains have 1,500 warmup + 4,000 retained iterations; adaptation stops after warmup. ArviZ R-hat, bulk/tail ESS, MCSE and traces are saved. Independent tests check the integrated mixture density and Gaussian joint AR covariance.
+## Deliverables
 
-## Current full-data associations: Student-t, demand-adjusted
-
-| Country | Adjusted beta | 95% equal-tailed credible interval |
-|---|---:|---|
-| United States | 0.09105 | [0.05837, 0.12670] |
-| China | 0.09157 | [0.04639, 0.13633] |
-| Japan | 0.03093 | [0.00298, 0.05895] |
-| Canada | 0.12277 | [0.08442, 0.16079] |
-
-Units are monthly inflation percentage points per 10-percentage-point higher monthly oil change. These are model-conditional associations. The intervals do not account for omitted confounding or every model failure and are not a test of country differences. Sampling passes for all 32 simulation, full-data and training fits; model adequacy is assessed separately. Current tables and generated findings are in `results/final_project/`; older `results/` tables remain exploratory references.
-
-Student-t 12-lag innovation diagnostics give p≈0.0256 (US), 0.0140 (China), 0.0027 (Japan), and 0.1650 (Canada). Heavy tails improve US/Chinese extreme-value checks but Japan's maximum remains outside the predictive envelope, and dependence is not resolved. Synthetic adjusted beta is about 0.1502 under Gaussian and 0.1456 under Student-t data for a true 0.1500; both intervals include the truth. Omitting the known simulated confounder shifts estimates to about 0.20. One successful recovery per family is not a coverage study.
-
-## Analysis and validation
-
-1. Verify provenance, unique keys, complete calendars, national CPI units, lags and transformations for all four countries.
-2. Show distributions and country inflation histories; inspect prior predictions.
-3. Estimate seasonal adjusted/unadjusted Bayesian AR models separately for each country.
-4. Recover known parameters in a separate simulated system with seasonality, demand confounding and AR errors. Keep simulated measurements out of real-data analysis.
-5. Check sampling, posterior predictive intervals, extremes, innovation dependence, subperiods and large oil movements. Report failures rather than suppressing them.
-6. Train on 2000–2019 and assess retrospective one-step predictions over 2020–2024. Seasonal effects use training data only. Compare simple benchmarks and a matched Student-t AR model without oil, retaining C and the same seasonal structure and priors on retained parameters. Adding oil reduces RMSE about 4.79% in China, barely changes Japan (0.25% lower RMSE but worse log score), and raises RMSE about 4.17% in the US and 2.53% in Canada. These are exploratory single-period comparisons, not significance tests or real-time forecasts.
-7. Present country estimates with uncertainty without claiming a causal ranking or formal between-country difference. No joint country contrast or correlated-country error model is implemented.
-
-## Limits and next steps
-
-The additional [strengthening suite](STRENGTHENING.md) now compares matched conditional AR1/AR2/seasonal errors, degrees of freedom 3/5/10, three chronological evaluation windows with block uncertainty, 40 repeated synthetic datasets, alternative oil lags, Bayesian subperiod fits and an extreme-observation audit. Read `results/strengthening/FINDINGS.md` for generated results. Original numerical results above remain the stationary-initial baseline; the extensions condition on 13 initial months and must be compared to their own matched AR1 reference. These checks address model sensitivity without resolving causal identification.
-
-Calendar-month effects do not fully address Lunar New Year, changing seasonality, consumption taxes or administered prices. Student-t innovations are implemented, but fixed nu=5, residual dependence and the initial-distribution assumption remain limitations. Good sampling is not evidence that the likelihood or DAG is correct. The 1,200 rows share 300 global oil/demand histories, so they are not independent exposures.
-
-One global-activity proxy may fail to block relevant demand, expectations, supply-chain, exchange-rate and policy paths. Japan and China are large economies; treating global oil/demand as external to domestic conditions is substantive. The empirical coefficients are conditional associations; causal language requires the stated strong assumptions.
-
-For the course, the three substantive constructs are preserved in separate country fits. Country-specific parameters, calendar effects and AR dependence add statistical complexity, and their temporal interpretation must be justified under the instructor's three-variable scope. Do not call the seasonal terms extra proven confounder adjustment. The analysis is exploratory; the holdout period has already informed earlier model development.
-
-## Submission workflow
-
-The computational notebook is complete, and its appendix includes data preparation, Gaussian sampling and Student-t/cache/evaluation source. Submission PDF pagination (at most 20 pages in 12-point font), class dataset uniqueness registration, and the group screencast remain separate deliverables. The proposal files remain available locally. The report documents external prior-scale context and uncertainty rather than claiming that prior simulation alone establishes an objectively correct prior.
-
-Mechanism reference: [Federal Reserve, Oil Price Shocks and Inflation in a DSGE Model of the Global Economy (2024)](https://www.federalreserve.gov/econres/notes/feds-notes/oil-price-shocks-and-inflation-in-a-dsge-model-of-the-global-economy-20240802.html). It explains consumer-energy and production-cost transmission; its model-based supply-shock effect is not a direct calibration of our one-month observational nominal-price estimand.
+`notebooks/final_project.ipynb`, sourced from `analysis/final_project.py`, includes the current computational implementation. Current tables/figures live in `results/combined_project/`. Earlier outputs remain historical references. The course also requires a code-inclusive, 12-point PDF of at most 20 pages, dataset uniqueness registration and a group screencast; these remain separate submission steps.

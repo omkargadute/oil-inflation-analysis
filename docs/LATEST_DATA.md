@@ -1,5 +1,7 @@
 # Extension to current releases
 
+**Historical implementation:** the final notebook now combines 2000–October 2026 throughout the main analysis and integrates missing outcomes under the AR likelihood. See [COMBINED_NOTEBOOK.md](COMBINED_NOTEBOOK.md). The segmented extension/results below are an earlier comparison, not the current main results.
+
 Downloaded and verified November 24, 2026. The final notebook retains the original 2000–2024 analysis and adds a current-release section through **October 2026** for all four countries. The expanded calendar has 1,288 country-month rows and 1,286 observed monthly inflation outcomes. No historical values changed in the overlapping 2000–2024 core series in this retrieval.
 
 | Input | Latest observation in downloaded snapshot | Model use |
