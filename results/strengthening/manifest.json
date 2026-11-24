@@ -1,0 +1,9 @@
+{
+  "signature": "ee0cb416b88e82e4e91fa2a41193e844c35ed137137f177e67d9d2c5bf903dc9",
+  "completed": true,
+  "initial_conditioning_months": 13,
+  "registered_cases": 188,
+  "unique_fit_keys": 184,
+  "simulation_replications": 40,
+  "all_sampling_pass": true
+}

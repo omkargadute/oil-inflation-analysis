@@ -5,5 +5,7 @@
 *.ipynb text eol=lf
 # Keep official snapshots byte-for-byte, including provider line endings.
 data/raw/*.csv -text -diff
+data/raw/latest/*.csv -text -diff
+data/raw/latest/manifest.json -text whitespace=cr-at-eol
 *.png binary
 *.npz binary

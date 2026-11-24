@@ -4,6 +4,9 @@ A Bayesian comparison of **the United States, China, Japan and Canada**, January
 
 ## Start here
 
+- [Current-release extension](docs/LATEST_DATA.md): verified monthly data through October 2026, daily Brent through November 17, calendar-safe handling of missing US October 2025 CPI, updated coefficients and fixed-training recent forecasts. The original 2000–2024 study remains a reproducible reference.
+- [Model-strengthening findings](results/strengthening/FINDINGS.md): dependence/tail comparisons, three rolling windows, 40 independent simulation datasets, lag/period sensitivity and retained-outlier audit.
+
 - [Completed computational notebook](notebooks/final_project.ipynb): all nine report sections, Gaussian/Student-t estimation, synthetic validation, posterior checks, sensitivity, matched no-oil forecasts, and conclusions. The appendix includes the shared computational source.
 - [Jupyter setup and workflow](docs/NOTEBOOK_SETUP.md): isolated `.venv`, dedicated kernel, launch and rebuild commands.
 - [Exploratory notebook](notebooks/oil_inflation.ipynb): earlier four-country fits, simulation recovery, diagnostics and holdout comparisons; retained as a reference, not the final submission.
@@ -45,6 +48,10 @@ analysis/final_project.py                 Completed computational report source
 analysis/data.py                          Verified calendar-aligned data preparation
 analysis/model.py                         Seasonal AR(1) likelihood and sampler
 analysis/robust_model.py                  Student-t sampler, cache and predictive evaluation
+analysis/strengthening.py                 Five model-strengthening experiment families
+analysis/latest_data.py                   Current snapshot verification and gap-preserving preparation
+analysis/latest_model.py                  Segmented AR1 likelihood and recent forecasts
+analysis/latest_analysis.py               Current-release analysis and generated findings
 notebooks/final_project.ipynb              Executed nine-section computational report
 notebooks/oil_inflation.ipynb              Earlier exploratory analysis
 scripts/                                 Source verification, audit, notebook builder
@@ -52,6 +59,8 @@ data/raw/                                Global predictors and OECD CPI snapshot
 data/processed/multicountry_monthly.csv    Main four-country analysis panel
 data/processed/country_cpi_candidate_panel.csv  Broader availability-audit panel
 results/final_project/                   Current final computational report outputs
+results/strengthening/                   Matched conditional robustness experiments
+results/latest/                          Current-release results and source/gap/revision audits
 results/                                 Earlier exploratory outputs and coverage audit
 docs/PROJECT_PLAN.md                      Scope, statistical model and limitations
 requirements.txt                         Reproduction dependencies
@@ -62,6 +71,8 @@ requirements-lock.txt                    Resolved isolated environment
 The prior US-only analysis and outputs are retired; a local ignored archive preserves them. Interest rates are reserved for future work.
 
 ## Sources and attribution
+
+The expanded [strengthening experiments](docs/STRENGTHENING.md) test dependence, tail shape, three rolling prediction windows, repeated simulation recovery, and lag/period sensitivity. Run `.\.venv\Scripts\python.exe scripts/run_strengthening.py` to precompute them. Tables, diagnostic plots and generated findings are in `results/strengthening/` and are displayed in the final notebook. These matched conditional fits use a common 13-month history and retain the original causal limitations.
 
 - CPI: [OECD Data Explorer](https://data-explorer.oecd.org/), national all-items, monthly unadjusted indices. US/China use the COICOP 1999 flow; Japan/Canada use the COICOP 2018 flow. Each country uses a single complete series without cross-flow splicing.
 - Brent: [EIA via FRED, MCOILBRENTEU](https://fred.stlouisfed.org/series/MCOILBRENTEU).

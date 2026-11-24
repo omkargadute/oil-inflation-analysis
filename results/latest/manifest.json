@@ -1,0 +1,9 @@
+{
+  "completed": true,
+  "common_endpoint": "2026-10-01",
+  "country_month_rows": 1288,
+  "observed_monthly_outcomes": 1286,
+  "retained_fits": 12,
+  "all_sampling_pass": true,
+  "raw_manifest_sha256": "a6b1c0a828774a1cb86608f9f5921bd84fff37c35c129ee7a4537e20e6df9781"
+}

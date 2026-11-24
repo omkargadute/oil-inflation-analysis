@@ -1,0 +1,6 @@
+file,verified,retrieved_utc,url
+brent_direct.csv,True,2026-11-24T22:27:23.624831+00:00,https://fred.stlouisfed.org/graph/fredgraph.csv?id=MCOILBRENTEU
+igrea.csv,True,2026-11-24T22:27:23.626829+00:00,https://fred.stlouisfed.org/graph/fredgraph.csv?id=IGREA
+oecd_country_cpi_1999.csv,True,2026-11-24T22:27:23.630872+00:00,"https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&format=csvfile"
+oecd_country_cpi_2018.csv,True,2026-11-24T22:27:23.635834+00:00,"https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&format=csvfile"
+daily_brent.csv,True,2026-11-24T22:27:23.639837+00:00,https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILBRENTEU

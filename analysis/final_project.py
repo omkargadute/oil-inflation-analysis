@@ -364,7 +364,7 @@ for iso,g in groups.items():
 priors=pd.DataFrame(prior_rows);robustness=pd.DataFrame(sensitivity)
 priors.to_csv(OUT/'prior_sensitivity.csv',index=False);robustness.to_csv(OUT/'subperiod_sensitivity.csv',index=False)
 display(priors.round(4));display(robustness.round(4))
-display(Markdown('Prior reweighting ESS assesses weight concentration, not replacement-chain mixing. HAC OLS checks use a different estimator and are exploratory; removing calendar segments also complicates lag-based inference. Fixed nu=5 remains an untested shape assumption beyond the Gaussian comparison.'))
+display(Markdown('Prior reweighting ESS assesses weight concentration, not replacement-chain mixing. HAC OLS checks use a different estimator and are exploratory; removing calendar segments also complicates lag-based inference. The extension suite below tests nu=3,5,10 and alternative dependence on matched conditional samples.'))
 # %% [markdown]
 # ### Retrospective prediction and matched no-oil comparison
 # Train on 2000–2019 only, then predict each month of 2020–2024 using observed previous residuals.
@@ -405,6 +405,49 @@ pd.DataFrame(forecast_detail).to_csv(OUT/'forecast_predictions.csv',index=False)
 display(forecasts.round(4));display(oil_comparison.round(3))
 assert training.sampling_pass.all(), 'Inspect training-model sampling diagnostics'
 # %% [markdown]
+# ### Strengthening experiments: matched conditional comparisons
+# We compare AR1, AR2 and multiplicative seasonal AR errors on identical outcomes, conditioning on
+# the first 13 months in every case. These sensitivity fits differ from the stationary-initial baseline.
+# Three chronological five-year evaluation windows compare oil/no-oil forecasts, with paired 12-month
+# block uncertainty. Forty independently simulated datasets test recovery across four scenarios.
+# Further checks vary tail shape, oil timing and pre/post-2020 periods. No model is selected by significance.
+# %%
+from analysis.strengthening import run_suite, OUT as STRENGTHENING_OUT
+from IPython.display import Image
+extensions=run_suite()
+display(Markdown('**Matched dependence and tail diagnostics**'))
+display(extensions['dependence_tail_checks'].round(4))
+display(Markdown('**Oil coefficients across dependence, tail, lag and period specifications**'))
+display(extensions['coefficient_sensitivity'].round(4))
+display(Markdown('**Rolling prediction: 180 evaluation months per country**'))
+display(extensions['rolling_aggregate'].round(4))
+display(Markdown('**Repeated recovery: Monte Carlo uncertainty matters**'))
+display(extensions['simulation_summary'].round(4))
+display(Markdown('**Extremes retained, with explicit conditioning-prefix status**'))
+display(extensions['extreme_observation_audit'].round(4))
+for figure in ['innovation_ACF.png','baseline_PACF.png','dependence_coefficients.png',
+               'rolling_gains.png','simulation_recovery.png']:
+    display(Image(filename=str(STRENGTHENING_OUT/figure)))
+display(Markdown((STRENGTHENING_OUT/'FINDINGS.md').read_text(encoding='utf-8')))
+# %% [markdown]
+# ### Extension through the latest common monthly release
+# Current snapshots are separately versioned. We preserve missing calendar months, fit segmented
+# conditional AR1 models, and forecast 2025 onward using coefficients trained only through 2024.
+# Daily oil observations provide recent context, with no substitution for monthly averages.
+# %%
+from analysis.latest_analysis import run_latest
+from analysis.latest_data import OUT as LATEST_OUT
+latest=run_latest()
+display(Markdown('**Current source availability and historical revisions**'))
+display(latest['availability']);display(latest['historical_revisions'].round(7))
+display(Markdown('**Matched current-vintage coefficients: through 2024 versus extended**'))
+display(latest['coefficients'].drop(columns='key').round(4))
+display(Markdown('**Fixed-training recent forecasts, with calendar-safe exclusions**'))
+display(latest['forecast_metrics'].round(4));display(latest['oil_forecast_gains'].round(3))
+for figure in ['recent_history.png','recent_forecasts.png']:
+    display(Image(filename=str(LATEST_OUT/figure)))
+display(Markdown((LATEST_OUT/'FINDINGS.md').read_text(encoding='utf-8')))
+# %% [markdown]
 # ## 9. Findings, interpretation and limitations
 # The following summary is generated from the completed fits, not from anticipated coefficient signs.
 # The adjusted/unadjusted difference in real data is not itself a measurement of causal bias removal.
@@ -431,8 +474,10 @@ for _,r in oil_comparison.iterrows():
 lines+=['','## Conclusions and future work','',
         'Oil coefficients, confounder adjustment and forecast gains answer different questions. The simulation shows what omitted-confounder bias can look like under a known DAG; real-data adjustment cannot certify that IGREA blocks every relevant path. Heavy-tailed innovations may improve extremes while leaving serial or calendar dependence. We report both families rather than selecting by significance.',
         '', 'Interpretation depends on consistency, overlap, adequate temporal structure and sufficient confounding control. Global-demand measurement error, exchange rates, subsidies, taxes, moving holidays and shared shocks remain limitations. Student-t nu=5 and the variance-matched initial distribution are additional assumptions; sigma is a scale, not the Student-t innovation SD. Prior reweighting and HAC checks do not cover every form of model uncertainty.',
-        '', 'Future work should examine moving holidays and regime changes, alternative tail/dependence assumptions, local-currency oil exposure and better-identified supply shocks. Interest rates and pooled country-effect comparisons require a separate expanded design. No causal ranking across countries or real-time forecast claim follows from this analysis.']
-report='\n'.join(lines)+'\n'
+        '', 'The strengthening experiments above test alternative tails, dependence, lags and periods; their generated findings qualify the baseline results. Moving holidays, local-currency oil exposure and better-identified supply shocks remain future work. Interest rates and pooled country-effect comparisons require a separate expanded design. No causal ranking across countries or real-time forecast claim follows from this analysis.']
+lines += ['', '## Completed strengthening experiments', '', (STRENGTHENING_OUT/'FINDINGS.md').read_text(encoding='utf-8')]
+lines += ['', '## Current-release extension', '', (LATEST_OUT/'FINDINGS.md').read_text(encoding='utf-8')]
+report='\n'.join(lines).rstrip()+'\n'
 (OUT/'FINDINGS.md').write_text(report,encoding='utf-8')
 display(Markdown(report))
 print('Computational sections complete. Submission PDF pagination and the group screencast remain separate deliverables.')

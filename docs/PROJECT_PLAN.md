@@ -2,6 +2,8 @@
 
 ## Scope and question
 
+**Current-release extension:** the final notebook now also analyzes January 2000–October 2026 from separately verified current snapshots. See [LATEST_DATA.md](LATEST_DATA.md) for the US October 2025 CPI gap, the segmented conditional likelihood, historical-revision audit, and pre-2025-trained forecasts of 2025 onward. The 2000–2024 specification and outputs below remain the original reference. Daily Brent through November 17 provides recent context; it does not replace monthly treatment measurements.
+
 **United States, China, Japan and Canada, January 2000–December 2024.** Fit the same model separately in each country, using 300 complete months per country. International comparison is part of the analysis; interest rates are future work.
 
 Question: under the proposed causal assumptions, how does a 10-percentage-point higher monthly oil-price change affect next-month monthly CPI inflation, accounting for prior global economic activity? How do the model-conditional estimates vary across these countries?
@@ -59,6 +61,8 @@ Student-t 12-lag innovation diagnostics give p≈0.0256 (US), 0.0140 (China), 0.
 7. Present country estimates with uncertainty without claiming a causal ranking or formal between-country difference. No joint country contrast or correlated-country error model is implemented.
 
 ## Limits and next steps
+
+The additional [strengthening suite](STRENGTHENING.md) now compares matched conditional AR1/AR2/seasonal errors, degrees of freedom 3/5/10, three chronological evaluation windows with block uncertainty, 40 repeated synthetic datasets, alternative oil lags, Bayesian subperiod fits and an extreme-observation audit. Read `results/strengthening/FINDINGS.md` for generated results. Original numerical results above remain the stationary-initial baseline; the extensions condition on 13 initial months and must be compared to their own matched AR1 reference. These checks address model sensitivity without resolving causal identification.
 
 Calendar-month effects do not fully address Lunar New Year, changing seasonality, consumption taxes or administered prices. Student-t innovations are implemented, but fixed nu=5, residual dependence and the initial-distribution assumption remain limitations. Good sampling is not evidence that the likelihood or DAG is correct. The 1,200 rows share 300 global oil/demand histories, so they are not independent exposures.
 

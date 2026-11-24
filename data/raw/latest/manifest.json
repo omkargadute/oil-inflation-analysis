@@ -1,0 +1,34 @@
+[
+  {
+    "file": "brent_direct.csv",
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MCOILBRENTEU",
+    "retrieved_utc": "2026-11-24T22:27:23.624831+00:00",
+    "sha256": "03464a725626ee6a1d3f544cae3510bda479e7af5e1ea31c2f17e61ea6d42f28"
+  },
+  {
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IGREA",
+    "file": "igrea.csv",
+    "retrieved_utc": "2026-11-24T22:27:23.626829+00:00",
+    "sha256": "c21997caf4bf1f5a9670c424f44ea90558e9dbf953610274f26e3fc9b65bdeb0"
+  },
+  {
+    "file": "oecd_country_cpi_1999.csv",
+    "flow": "DSD_PRICES@DF_PRICES_ALL",
+    "url": "https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&format=csvfile",
+    "retrieved_utc": "2026-11-24T22:27:23.630872+00:00",
+    "sha256": "139e4d62c798da3a120bc66bf039c3d9aeebc916ded14bc1dca1afd331711a18"
+  },
+  {
+    "file": "oecd_country_cpi_2018.csv",
+    "flow": "DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL",
+    "url": "https://sdmx.oecd.org/public/rest/v1/data/OECD.SDD.TPS,DSD_PRICES_COICOP2018@DF_PRICES_C2018_ALL,1.0/USA+CHN+JPN+CAN+GBR+DEU+FRA+ITA+ESP+KOR+IND+BRA+MEX+ZAF+AUS+NOR+CHE.M.N.CPI.IX._T.N+S._Z?startPeriod=1999-01&format=csvfile",
+    "retrieved_utc": "2026-11-24T22:27:23.635834+00:00",
+    "sha256": "e559fffa5e6290d65fc01d408f57a1645d09c958fcf021348bf3f5fbb8470092"
+  },
+  {
+    "file": "daily_brent.csv",
+    "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILBRENTEU",
+    "retrieved_utc": "2026-11-24T22:27:23.639837+00:00",
+    "sha256": "aa587e1c6edc32b9e3cdfe2dd332245c9d1076868d5735909b1f1644b325eb85"
+  }
+]
