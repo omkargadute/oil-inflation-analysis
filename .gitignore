@@ -8,6 +8,9 @@ __pycache__/
 .env.*
 !.env.example
 docs/course_requirements.pdf
+/final_project_details.pdf
+/final_project_proposal_template.pdf
 results/*.npz
+results/**/*.npz
 .DS_Store
 Thumbs.db
